@@ -4,11 +4,12 @@
 **       www.gravedigger-company.nl
 **
 */
-
+#pragma semicolon 1
+#pragma newdecls required
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.8.1"
+#define PLUGIN_VERSION "0.9.0"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
 #define SERVER_TIMEOUT 10.0
@@ -16,316 +17,323 @@
 #define MAX_INFO_LEN 200
 //#define DEBUG
 
-new serverCount = 0;
-new advertCount = 0;
-new advertInterval = 1;
-new String:serverName[MAX_SERVERS][MAX_STR_LEN];
-new String:serverAddress[MAX_SERVERS][MAX_STR_LEN];
-new serverPort[MAX_SERVERS];
-new String:serverInfo[MAX_SERVERS][MAX_INFO_LEN];
-new Handle:socket[MAX_SERVERS];
-new bool:socketError[MAX_SERVERS];
+int
+	serverCount = 0
+	, advertCount = 0
+	, advertInterval = 1
+	, serverPort[MAX_SERVERS];
+char
+	serverName[MAX_SERVERS][MAX_STR_LEN]
+	, serverAddress[MAX_SERVERS][MAX_STR_LEN]
+	, serverInfo[MAX_SERVERS][MAX_INFO_LEN];
+bool
+	socketError[MAX_SERVERS];
+Handle
+	socket[MAX_SERVERS];
+ConVar
+	cv_hoptrigger
+	, cv_serverformat
+	, cv_broadcasthops
+	, cv_advert
+	, cv_advert_interval;
 
-new Handle:cv_hoptrigger = INVALID_HANDLE
-new Handle:cv_serverformat = INVALID_HANDLE
-new Handle:cv_broadcasthops = INVALID_HANDLE
-new Handle:cv_advert = INVALID_HANDLE
-new Handle:cv_advert_interval = INVALID_HANDLE
 
 
-
-public Plugin:myinfo =
+public Plugin myinfo =
 {
-  name = "Server Hop",
-  author = "[GRAVE] rig0r",
-  description = "Provides live server info with join option",
-  version = PLUGIN_VERSION,
-  url = "http://www.gravedigger-company.nl"
+	name = "Server Hop",
+	author = "[GRAVE] rig0r, JoinedSenses",
+	description = "Provides live server info with join option",
+	version = PLUGIN_VERSION,
+	url = "https://github.com/JoinedSenses/TF2-ServerHop"
 };
 
-public OnPluginStart()
+public void OnPluginStart()
 {
-  LoadTranslations( "serverhop.phrases" );
+	LoadTranslations("serverhop.phrases");
 
   // convar setup
-  cv_hoptrigger = CreateConVar( "sm_hop_trigger",
-                                "!servers",
-                                "What players have to type in chat to activate the plugin (besides !hop)" );
-  cv_serverformat = CreateConVar( "sm_hop_serverformat",
-                                  "%name - %map (%numplayers/%maxplayers)",
-                                  "Defines how the server info should be presented" );
-  cv_broadcasthops = CreateConVar( "sm_hop_broadcasthops",
-                                   "1",
-                                   "Set to 1 if you want a broadcast message when a player hops to another server" );
-  cv_advert = CreateConVar( "sm_hop_advertise",
-                            "1",
-                            "Set to 1 to enable server advertisements" );
-  cv_advert_interval = CreateConVar( "sm_hop_advertisement_interval",
-                                     "1",
-                                     "Advertisement interval: advertise a server every x minute(s)" );
+	cv_hoptrigger = CreateConVar("sm_hop_trigger",
+								"!servers",
+								"What players have to type in chat to activate the plugin (besides !hop)");
+	cv_serverformat = CreateConVar("sm_hop_serverformat",
+								  "%name - %map (%numplayers/%maxplayers)",
+								  "Defines how the server info should be presented");
+	cv_broadcasthops = CreateConVar("sm_hop_broadcasthops",
+								   "1",
+								   "Set to 1 if you want a broadcast message when a player hops to another server");
+	cv_advert = CreateConVar("sm_hop_advertise",
+							"1",
+							"Set to 1 to enable server advertisements");
+	cv_advert_interval = CreateConVar("sm_hop_advertisement_interval",
+									 "1",
+									 "Advertisement interval: advertise a server every x minute(s)");
 
-  AutoExecConfig( true, "plugin.serverhop" );
-  
-  new Handle:timer = CreateTimer( REFRESH_TIME, RefreshServerInfo, _, TIMER_REPEAT );
+	AutoExecConfig(true, "plugin.serverhop");
 
-  RegConsoleCmd( "say", Command_Say );
-  RegConsoleCmd( "say_team", Command_Say );
-  RegConsoleCmd("sm_hop", Command_Hop, "Hop servers.");  
-  RegConsoleCmd("sm_servers", Command_Servers, "Hop servers."); 
+	Handle timer = CreateTimer(REFRESH_TIME, RefreshServerInfo, _, TIMER_REPEAT);
 
-  new String:path[MAX_STR_LEN];
-  new Handle:kv;
+	RegConsoleCmd("say", Command_Say);
+	RegConsoleCmd("say_team", Command_Say);
+	RegConsoleCmd("sm_hop", Command_Hop, "Hop servers.");
+	RegConsoleCmd("sm_servers", Command_Servers, "Hop servers.");
 
-  BuildPath( Path_SM, path, sizeof( path ), "configs/serverhop.cfg" );
-  kv = CreateKeyValues( "Servers" );
+	char path[MAX_STR_LEN];
 
-  if ( !FileToKeyValues( kv, path ) )
-    LogToGame( "Error loading server list" );
+	BuildPath(Path_SM, path, sizeof(path), "configs/serverhop.cfg");
+	KeyValues kv = new KeyValues("Servers");
 
-  new i;
-  KvRewind( kv );
-  KvGotoFirstSubKey( kv );
-  do {
-    KvGetSectionName( kv, serverName[i], MAX_STR_LEN );
-    KvGetString( kv, "address", serverAddress[i], MAX_STR_LEN );
-    serverPort[i] = KvGetNum( kv, "port", 27015 );
-    i++;
-  } while ( KvGotoNextKey( kv ) );
-  serverCount = i;
+	if (!kv.ImportFromFile(path)) {
+		LogToGame("Error loading server list");
+	}
 
-  TriggerTimer( timer );
+	int i;
+	kv.Rewind();
+	kv.GotoFirstSubKey();
+	do {
+		kv.GetSectionName(serverName[i], MAX_STR_LEN);
+		kv.GetString("address", serverAddress[i], MAX_STR_LEN);
+		serverPort[i] = kv.GetNum("port", 27015);
+		i++;
+	}
+	while (kv.GotoNextKey());
+	serverCount = i;
+
+	TriggerTimer(timer);
 }
 
-public Action:Command_Hop(client, args)
+public Action Command_Hop(int client, int args)
 {
-    ServerMenu(client);
-    return Plugin_Handled;
-} 
-public Action:Command_Servers(client, args)
+	ServerMenu(client);
+	return Plugin_Handled;
+}
+public Action Command_Servers(int client, int args)
 {
-    ServerMenu(client);
-    return Plugin_Handled;
-} 
-
-public Action:Command_Say( client, args )
-{
-  new String:text[MAX_STR_LEN];
-  new startidx = 0;
-
-  if ( !GetCmdArgString( text, sizeof( text ) ) ) {
-    return Plugin_Continue;
-  }
-
-  if ( text[strlen( text) - 1] == '"' ) {
-    text[strlen( text )-1] = '\0';
-    startidx = 1;
-  }
-
-  new String:trigger[MAX_STR_LEN];
-  GetConVarString( cv_hoptrigger, trigger, sizeof( trigger ) );
-
-  if ( strcmp( text[startidx], trigger, false ) == 0 || strcmp( text[startidx], "!hop", false ) == 0 ) {
-    ServerMenu( client );
-  }
-
-  return Plugin_Continue;
+	ServerMenu(client);
+	return Plugin_Handled;
 }
 
-public Action:ServerMenu( client )
+public Action Command_Say(int client, int args)
 {
-  new Handle:menu = CreateMenu( MenuHandler );
-  new String:serverNumStr[MAX_STR_LEN];
-  new String:menuTitle[MAX_STR_LEN];
-  Format( menuTitle, sizeof( menuTitle ), "%T", "SelectServer", client );
-  SetMenuTitle( menu, menuTitle );
+	char text[MAX_STR_LEN];
+	int startidx = 0;
 
-  for ( new i = 0; i < serverCount; i++ ) {
-    if ( strlen( serverInfo[i] ) > 0 ) {
-      #if defined DEBUG then
-        PrintToConsole( client, serverInfo[i] );
-      #endif
-      IntToString( i, serverNumStr, sizeof( serverNumStr ) );
-      AddMenuItem( menu, serverNumStr, serverInfo[i] );
-    }
-  } 
-  DisplayMenu( menu, client, 20 );
+	if (!GetCmdArgString(text, sizeof(text))) {
+		return Plugin_Continue;
+	}
+
+	if (text[strlen(text) - 1] == '"') {
+		text[strlen(text)-1] = '\0';
+		startidx = 1;
+	}
+
+	char trigger[MAX_STR_LEN];
+	cv_hoptrigger.GetString(trigger, sizeof(trigger));
+
+	if (strcmp(text[startidx], trigger, false) == 0 || strcmp(text[startidx], "!hop", false) == 0) {
+		ServerMenu(client);
+	}
+
+	return Plugin_Continue;
 }
 
-public MenuHandler( Handle:menu, MenuAction:action, param1, param2 )
+public Action ServerMenu(int client)
 {
-  if ( action == MenuAction_Select ) {
-    new String:infobuf[MAX_STR_LEN];
-    new String:address[MAX_STR_LEN];
+	char
+		serverNumStr[MAX_STR_LEN]
+		, menuTitle[MAX_STR_LEN];
+	Menu menu = new Menu(MenuHandler, MENU_ACTIONS_DEFAULT);
+	Format(menuTitle, sizeof(menuTitle), "%T", "SelectServer", client);
+	menu.SetTitle(menuTitle);
 
-    GetMenuItem( menu, param2, infobuf, sizeof( infobuf ) );
-    new serverNum = StringToInt( infobuf );
-
-    // header
-    new Handle:kvheader = CreateKeyValues( "header" );
-    new String:menuTitle[MAX_STR_LEN];
-    Format( menuTitle, sizeof( menuTitle ), "%T", "AboutToJoinServer", param1 );
-    KvSetString( kvheader, "title", menuTitle );
-    KvSetNum( kvheader, "level", 1 );
-    KvSetString( kvheader, "time", "10" );
-    CreateDialog( param1, kvheader, DialogType_Msg );
-    CloseHandle( kvheader );
-    
-    // join confirmation dialog
-    new Handle:kv = CreateKeyValues( "menu" );
-    KvSetString( kv, "time", "10" );
-    Format( address, MAX_STR_LEN, "%s:%i", serverAddress[serverNum], serverPort[serverNum] );
-    KvSetString( kv, "title", address );
-    CreateDialog( param1, kv, DialogType_AskConnect );
-    CloseHandle( kv );
-
-    // broadcast to all
-    if ( GetConVarBool( cv_broadcasthops ) ) {
-      new String:clientName[MAX_NAME_LENGTH];
-      GetClientName( param1, clientName, sizeof( clientName ) );
-      PrintToChatAll( "\x04[\x03hop\x04]\x01 %t", "HopNotification", clientName, serverInfo[serverNum] );
-    }
-  }
+	for (int i = 0; i < serverCount; i++) {
+		if (strlen(serverInfo[i]) > 0) {
+			#if defined DEBUG then
+			PrintToConsole(client, serverInfo[i]);
+			#endif
+			IntToString(i, serverNumStr, sizeof(serverNumStr));
+			menu.AddItem(serverNumStr, serverInfo[i]);
+		}
+	}
+	menu.Display(client, 20);
 }
 
-public Action:RefreshServerInfo( Handle:timer )
+public int MenuHandler(Menu menu, MenuAction action, int param1, int param2)
 {
-  for ( new i = 0; i < serverCount; i++ ) {
-    serverInfo[i] = "";
-    socketError[i] = false;
-    socket[i] = SocketCreate( SOCKET_UDP, OnSocketError );
-    SocketSetArg( socket[i], i );
-    SocketConnect( socket[i], OnSocketConnected, OnSocketReceive, OnSocketDisconnected, serverAddress[i], serverPort[i] );
-  }
+	if (action == MenuAction_Select) {
+		char
+			infobuf[MAX_STR_LEN]
+			, address[MAX_STR_LEN];
 
-  CreateTimer( SERVER_TIMEOUT, CleanUp );
+		menu.GetItem(param2, infobuf, sizeof(infobuf));
+		int serverNum = StringToInt(infobuf);
+
+	// header
+		KeyValues kvheader = new KeyValues("header");
+		char menuTitle[MAX_STR_LEN];
+		Format(menuTitle, sizeof(menuTitle), "%T", "AboutToJoinServer", param1);
+		kvheader.SetString("title", menuTitle);
+		kvheader.SetNum("level", 1);
+		kvheader.SetString("time", "10");
+		CreateDialog(param1, kvheader, DialogType_Msg);
+		delete kvheader;
+
+		// join confirmation dialog
+		KeyValues kv = new KeyValues("menu");
+		kv.SetString("time", "10");
+		Format(address, MAX_STR_LEN, "%s:%i", serverAddress[serverNum], serverPort[serverNum]);
+		kv.SetString("title", address);
+		CreateDialog(param1, kv, DialogType_AskConnect);
+		delete kv;
+
+		// broadcast to all
+		if (cv_broadcasthops.BoolValue) {
+			char clientName[MAX_NAME_LENGTH];
+			GetClientName(param1, clientName, sizeof(clientName));
+			PrintToChatAll("\x04[\x03hop\x04]\x01 %t", "HopNotification", clientName, serverInfo[serverNum]);
+		}
+	}
 }
 
-public Action:CleanUp( Handle:timer )
+public Action RefreshServerInfo(Handle timer)
 {
-  for ( new i = 0; i < serverCount; i++ ) {
-    if ( strlen( serverInfo[i] ) == 0 && !socketError[i] ) {
-      LogError( "Server %s:%i is down: no timely reply received", serverAddress[i], serverPort[i] );
-      CloseHandle( socket[i] );
-    }
-  }
+	for (int i = 0; i < serverCount; i++) {
+		serverInfo[i] = "";
+		socketError[i] = false;
+		socket[i] = SocketCreate(SOCKET_UDP, OnSocketError);
+		SocketSetArg(socket[i], i);
+		SocketConnect(socket[i], OnSocketConnected, OnSocketReceive, OnSocketDisconnected, serverAddress[i], serverPort[i]);
+	}
+
+	CreateTimer(SERVER_TIMEOUT, CleanUp);
+}
+
+public Action CleanUp(Handle timer)
+{
+	for (int i = 0; i < serverCount; i++) {
+		if (strlen(serverInfo[i]) == 0 && !socketError[i]) {
+			LogError("Server %s:%i is down: no timely reply received", serverAddress[i], serverPort[i]);
+			delete socket[i];
+		}
+	}
 
   // all server info is up to date: advertise
-  if ( GetConVarBool( cv_advert ) ) {
-    if ( advertInterval == GetConVarFloat( cv_advert_interval ) ) {
-      Advertise();
-    }
-    advertInterval++;
-    if ( advertInterval > GetConVarFloat( cv_advert_interval ) ) {
-      advertInterval = 1;
-    }
-  }
+	if (cv_advert.BoolValue) {
+		if (advertInterval == cv_advert_interval.FloatValue) {
+			Advertise();
+		}
+		advertInterval++;
+		if (advertInterval > cv_advert_interval.FloatValue) {
+			advertInterval = 1;
+		}
+	}
 }
 
-public Action:Advertise()
+public void Advertise()
 {
-  new String:trigger[MAX_STR_LEN];
-  GetConVarString( cv_hoptrigger, trigger, sizeof( trigger ) );
+	char trigger[MAX_STR_LEN];
+	cv_hoptrigger.GetString(trigger, sizeof(trigger));
 
-  // skip servers being marked as down
-  while ( strlen( serverInfo[advertCount] ) == 0 ) {
-    #if defined DEBUG then
-      LogError( "Not advertising down server %i", advertCount );
-    #endif
-    advertCount++;
-    if ( advertCount >= serverCount ) {
-      advertCount = 0;
-      break;
-    }
-  }
+	// skip servers being marked as down
+	while (strlen(serverInfo[advertCount]) == 0) {
+		#if defined DEBUG then
+		LogError("Not advertising down server %i", advertCount);
+		#endif
+		advertCount++;
+		if (advertCount >= serverCount) {
+			advertCount = 0;
+			break;
+		}
+	}
 
-  if ( strlen( serverInfo[advertCount] ) > 0 ) {
-    PrintToChatAll( "\x04[\x03hop\x04]\x01 %t", "Advert", serverInfo[advertCount], trigger );
-    #if defined DEBUG then
-      LogError( "Advertising server %i (%s)", advertCount, serverInfo[advertCount] );
-    #endif
+	if (strlen(serverInfo[advertCount]) > 0) {
+		PrintToChatAll("\x04[\x03hop\x04]\x01 %t", "Advert", serverInfo[advertCount], trigger);
+		#if defined DEBUG then
+		LogError("Advertising server %i (%s)", advertCount, serverInfo[advertCount]);
+		#endif
 
-    advertCount++;
-    if ( advertCount >= serverCount ) {
-      advertCount = 0;
-    }
-  }
+		advertCount++;
+		if (advertCount >= serverCount) {
+			advertCount = 0;
+		}
+	}
 }
 
-public OnSocketConnected( Handle:sock, any:i )
+public void OnSocketConnected(Handle sock, any i)
 {
-  decl String:requestStr[ 25 ];
-  Format( requestStr, sizeof( requestStr ), "%s", "\xFF\xFF\xFF\xFF\x54Source Engine Query" );
-  SocketSend( sock, requestStr, 25 );
+	char requestStr[ 25 ];
+	Format(requestStr, sizeof(requestStr), "%s", "\xFF\xFF\xFF\xFF\x54Source Engine Query");
+	SocketSend(sock, requestStr, 25);
 }
 
-GetByte( String:receiveData[], offset )
+int GetByte(char[] receiveData, int offset)
 {
-  return receiveData[offset];
+	return receiveData[offset];
 }
 
-String:GetString( String:receiveData[], dataSize, offset )
+char GetString(char[] receiveData, int dataSize, int offset)
 {
-  decl String:serverStr[MAX_STR_LEN] = "";
-  new j = 0;
-  for ( new i = offset; i < dataSize; i++ ) {
-    serverStr[j] = receiveData[i];
-    j++;
-    if ( receiveData[i] == '\x0' ) {
-      break;
-    }
-  }
-  return serverStr;
+	char serverStr[MAX_STR_LEN] = "";
+	int j = 0;
+	for (int i = offset; i < dataSize; i++) {
+		serverStr[j] = receiveData[i];
+		j++;
+		if (receiveData[i] == '\x0') {
+			break;
+		}
+	}
+	return serverStr;
 }
 
-public OnSocketReceive( Handle:sock, String:receiveData[], const dataSize, any:i )
+public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize, any i)
 {
-  new String:srvName[MAX_STR_LEN];
-  new String:mapName[MAX_STR_LEN];
-  new String:gameDir[MAX_STR_LEN];
-  new String:gameDesc[MAX_STR_LEN];
-  new String:numPlayers[MAX_STR_LEN];
-  new String:maxPlayers[MAX_STR_LEN];
+	char
+		srvName[MAX_STR_LEN]
+		, mapName[MAX_STR_LEN]
+		, gameDir[MAX_STR_LEN]
+		, gameDesc[MAX_STR_LEN]
+		, numPlayers[MAX_STR_LEN]
+		, maxPlayers[MAX_STR_LEN]
+		, format[MAX_STR_LEN];
 
   // parse server info
-  new offset = 2;
-  srvName = GetString( receiveData, dataSize, offset );
-  offset += strlen( srvName ) + 1;
-  mapName = GetString( receiveData, dataSize, offset );
-  offset += strlen( mapName ) + 1;
-  gameDir = GetString( receiveData, dataSize, offset );
-  offset += strlen( gameDir ) + 1;
-  gameDesc = GetString( receiveData, dataSize, offset );
-  offset += strlen( gameDesc ) + 1;
-  offset += 2;
-  IntToString( GetByte( receiveData, offset ), numPlayers, sizeof( numPlayers ) );
-  offset++;
-  IntToString( GetByte( receiveData, offset ), maxPlayers, sizeof( maxPlayers ) );
+	int offset = 2;
+	srvName = GetString(receiveData, dataSize, offset);
+	offset += strlen(srvName) + 1;
+	mapName = GetString(receiveData, dataSize, offset);
+	offset += strlen(mapName) + 1;
+	gameDir = GetString(receiveData, dataSize, offset);
+	offset += strlen(gameDir) + 1;
+	gameDesc = GetString(receiveData, dataSize, offset);
+	offset += strlen(gameDesc) + 1;
+	offset += 2;
+	IntToString(GetByte(receiveData, offset), numPlayers, sizeof(numPlayers));
+	offset++;
+	IntToString(GetByte(receiveData, offset), maxPlayers, sizeof(maxPlayers));
 
-  new String:format[MAX_STR_LEN];
-  GetConVarString( cv_serverformat, format, sizeof( format ) );
-  ReplaceString( format, strlen( format ), "%name", serverName[i], false );
-  ReplaceString( format, strlen( format ), "%map", mapName, false );
-  ReplaceString( format, strlen( format ), "%numplayers", numPlayers, false );
-  ReplaceString( format, strlen( format ), "%maxplayers", maxPlayers, false );
+	cv_serverformat.GetString(format, sizeof(format));
+	ReplaceString(format, strlen(format), "%name", serverName[i], false);
+	ReplaceString(format, strlen(format), "%map", mapName, false);
+	ReplaceString(format, strlen(format), "%numplayers", numPlayers, false);
+	ReplaceString(format, strlen(format), "%maxplayers", maxPlayers, false);
 
-  serverInfo[i] = format;
+	serverInfo[i] = format;
 
-  #if defined DEBUG then
-    LogError( serverInfo[i] );
-  #endif
+	#if defined DEBUG then
+	LogError(serverInfo[i]);
+	#endif
 
-  CloseHandle( sock );
+	delete sock;
 }
 
-public OnSocketDisconnected( Handle:sock, any:i )
+public void OnSocketDisconnected(Handle sock, any i)
 {
-  CloseHandle( sock );
+	delete sock;
 }
 
-public OnSocketError( Handle:sock, const errorType, const errorNum, any:i )
+public void OnSocketError(Handle sock, const int errorType, const int errorNum, any i)
 {
-  LogError( "Server %s:%i is down: socket error %d (errno %d)", serverAddress[i], serverPort[i], errorType, errorNum );
-  socketError[i] = true;
-  CloseHandle( sock );
+	LogError("Server %s:%i is down: socket error %d (errno %d)", serverAddress[i], serverPort[i], errorType, errorNum);
+	socketError[i] = true;
+	delete sock;
 }
-

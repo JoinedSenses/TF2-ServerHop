@@ -113,7 +113,7 @@ public void OnPluginStart() {
 
 public Action Command_Hop(int client, int args) {
 	if (!connectedFromFavorites[client]) {
-		PrintToChat(client, "\x01[\x03ServerHop\x01] You cannot use this feature, since you didn't connect from \x03favorites\x01. To use this feature, add this server to your favorites and connect through the favorites panel.");
+		PrintToChat(client, "\x01[\x03ServerHop\x01] Due to game changes, this feature cannot be used because you didn't connect from \x03favorites\x01. To use this feature, add this server to your favorites and reconnect through the favorites panel.");
 		return Plugin_Handled;
 	}
 	ServerMenu(client);

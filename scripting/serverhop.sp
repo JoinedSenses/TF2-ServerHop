@@ -29,7 +29,8 @@ char
 	, address[MAXPLAYERS+1][MAX_STR_LEN]
 	, server[MAXPLAYERS+1][MAX_INFO_LEN];
 bool
-	socketError[MAX_SERVERS];
+	socketError[MAX_SERVERS]
+	, connectedFromFavorites[MAXPLAYERS+1];
 Handle
 	socket[MAX_SERVERS];
 ConVar
@@ -44,7 +45,7 @@ public Plugin myinfo = {
 	author = "[GRAVE] rig0r, JoinedSenses",
 	description = "Provides live server info with join option",
 	version = PLUGIN_VERSION,
-	url = "https://github.com/JoinedSenses/ServerHop"
+	url = "https://github.com/JoinedSenses/TF2-ServerHop"
 };
 
 public void OnPluginStart() {
@@ -111,6 +112,10 @@ public void OnPluginStart() {
 }
 
 public Action Command_Hop(int client, int args) {
+	if (!connectedFromFavorites[client]) {
+		PrintToChat(client, "\x01[\x03ServerHop\x01] You cannot use this feature, since you didn't connect from \x03favorites\x01. To use this feature, add this server to your favorites and connect through the favorites panel.");
+		return Plugin_Handled;
+	}
 	ServerMenu(client);
 	return Plugin_Handled;
 }
@@ -140,6 +145,15 @@ public Action Command_Say(int client, int args) {
 	}
 
 	return Plugin_Continue;
+}
+
+
+public void OnClientAuthorized(int client, const char[] auth) {
+	char clientConnectMethod[64];
+	GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
+	if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {
+		connectedFromFavorites[client] = true;
+	}
 }
 
 public Action ServerMenu(int client) {

@@ -44,7 +44,7 @@ public Plugin myinfo = {
 	author = "[GRAVE] rig0r, JoinedSenses",
 	description = "Provides live server info with join option",
 	version = PLUGIN_VERSION,
-	url = "https://github.com/JoinedSenses/TF2-ServerHop"
+	url = "https://github.com/JoinedSenses/ServerHop"
 };
 
 public void OnPluginStart() {

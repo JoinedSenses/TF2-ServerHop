@@ -25,7 +25,9 @@ int
 char
 	serverName[MAX_SERVERS][MAX_STR_LEN]
 	, serverAddress[MAX_SERVERS][MAX_STR_LEN]
-	, serverInfo[MAX_SERVERS][MAX_INFO_LEN];
+	, serverInfo[MAX_SERVERS][MAX_INFO_LEN]
+	, address[MAXPLAYERS+1][MAX_STR_LEN]
+	, server[MAXPLAYERS+1][MAX_INFO_LEN];
 bool
 	socketError[MAX_SERVERS];
 Handle
@@ -37,10 +39,7 @@ ConVar
 	, cv_advert
 	, cv_advert_interval;
 
-
-
-public Plugin myinfo =
-{
+public Plugin myinfo = {
 	name = "Server Hop",
 	author = "[GRAVE] rig0r, JoinedSenses",
 	description = "Provides live server info with join option",
@@ -48,26 +47,35 @@ public Plugin myinfo =
 	url = "https://github.com/JoinedSenses/TF2-ServerHop"
 };
 
-public void OnPluginStart()
-{
+public void OnPluginStart() {
 	LoadTranslations("serverhop.phrases");
 
   // convar setup
-	cv_hoptrigger = CreateConVar("sm_hop_trigger",
-								"!servers",
-								"What players have to type in chat to activate the plugin (besides !hop)");
-	cv_serverformat = CreateConVar("sm_hop_serverformat",
-								  "%name - %map (%numplayers/%maxplayers)",
-								  "Defines how the server info should be presented");
-	cv_broadcasthops = CreateConVar("sm_hop_broadcasthops",
-								   "1",
-								   "Set to 1 if you want a broadcast message when a player hops to another server");
-	cv_advert = CreateConVar("sm_hop_advertise",
-							"1",
-							"Set to 1 to enable server advertisements");
-	cv_advert_interval = CreateConVar("sm_hop_advertisement_interval",
-									 "1",
-									 "Advertisement interval: advertise a server every x minute(s)");
+	cv_hoptrigger = CreateConVar(
+		"sm_hop_trigger",
+		"!servers",
+		"What players have to type in chat to activate the plugin (besides !hop)"
+	);
+	cv_serverformat = CreateConVar(
+		"sm_hop_serverformat",
+		"%name - %map (%numplayers/%maxplayers)",
+		"Defines how the server info should be presented"
+	);
+	cv_broadcasthops = CreateConVar(
+		"sm_hop_broadcasthops",
+		"1",
+		"Set to 1 if you want a broadcast message when a player hops to another server"
+	);
+	cv_advert = CreateConVar(
+		"sm_hop_advertise",
+		"1",
+		"Set to 1 to enable server advertisements"
+	);
+	cv_advert_interval = CreateConVar(
+		"sm_hop_advertisement_interval",
+		"1",
+		"Advertisement interval: advertise a server every x minute(s)"
+	);
 
 	AutoExecConfig(true, "plugin.serverhop");
 
@@ -102,19 +110,16 @@ public void OnPluginStart()
 	TriggerTimer(timer);
 }
 
-public Action Command_Hop(int client, int args)
-{
+public Action Command_Hop(int client, int args) {
 	ServerMenu(client);
 	return Plugin_Handled;
 }
-public Action Command_Servers(int client, int args)
-{
+public Action Command_Servers(int client, int args) {
 	ServerMenu(client);
 	return Plugin_Handled;
 }
 
-public Action Command_Say(int client, int args)
-{
+public Action Command_Say(int client, int args) {
 	char text[MAX_STR_LEN];
 	int startidx = 0;
 
@@ -137,8 +142,7 @@ public Action Command_Say(int client, int args)
 	return Plugin_Continue;
 }
 
-public Action ServerMenu(int client)
-{
+public Action ServerMenu(int client) {
 	char
 		serverNumStr[MAX_STR_LEN]
 		, menuTitle[MAX_STR_LEN];
@@ -156,47 +160,48 @@ public Action ServerMenu(int client)
 		}
 	}
 	menu.Display(client, 20);
+	return Plugin_Handled;
 }
 
-public int MenuHandler(Menu menu, MenuAction action, int param1, int param2)
-{
+public int MenuHandler(Menu menu, MenuAction action, int param1, int param2) {
 	if (action == MenuAction_Select) {
-		char
-			infobuf[MAX_STR_LEN]
-			, address[MAX_STR_LEN];
+		char infobuf[MAX_STR_LEN];
 
 		menu.GetItem(param2, infobuf, sizeof(infobuf));
 		int serverNum = StringToInt(infobuf);
-
-	// header
-		KeyValues kvheader = new KeyValues("header");
 		char menuTitle[MAX_STR_LEN];
 		Format(menuTitle, sizeof(menuTitle), "%T", "AboutToJoinServer", param1);
-		kvheader.SetString("title", menuTitle);
-		kvheader.SetNum("level", 1);
-		kvheader.SetString("time", "10");
-		CreateDialog(param1, kvheader, DialogType_Msg);
-		delete kvheader;
+		Format(address[param1], MAX_STR_LEN, "%s:%i", serverAddress[serverNum], serverPort[serverNum]);
+		server[param1] = serverInfo[serverNum];
 
-		// join confirmation dialog
-		KeyValues kv = new KeyValues("menu");
-		kv.SetString("time", "10");
-		Format(address, MAX_STR_LEN, "%s:%i", serverAddress[serverNum], serverPort[serverNum]);
-		kv.SetString("title", address);
-		CreateDialog(param1, kv, DialogType_AskConnect);
-		delete kv;
+		Panel panel = new Panel();
+		panel.SetTitle(menuTitle);
+		panel.DrawText(serverInfo[serverNum]);
+		panel.DrawText("Is this correct?");
+		panel.CurrentKey = 3;
+		panel.DrawItem("Accept");
+		panel.DrawItem("Decline");
+		panel.Send(param1, MenuConfirmHandler, 15);
 
+		delete panel;
+	}
+}
+
+public int MenuConfirmHandler(Menu menu, MenuAction action, int param1, int param2) {
+	if (param2 == 3) {
+		ClientCommand(param1, "redirect %s", address[param1]);
 		// broadcast to all
 		if (cv_broadcasthops.BoolValue) {
 			char clientName[MAX_NAME_LENGTH];
 			GetClientName(param1, clientName, sizeof(clientName));
-			PrintToChatAll("\x04[\x03hop\x04]\x01 %t", "HopNotification", clientName, serverInfo[serverNum]);
+			PrintToChatAll("\x04[\x03hop\x04]\x01 %t", "HopNotification", clientName, server[param1]);
 		}
 	}
+	address[param1] = "";
+	server[param1] = "";
 }
 
-public Action RefreshServerInfo(Handle timer)
-{
+public Action RefreshServerInfo(Handle timer) {
 	for (int i = 0; i < serverCount; i++) {
 		serverInfo[i] = "";
 		socketError[i] = false;
@@ -208,8 +213,7 @@ public Action RefreshServerInfo(Handle timer)
 	CreateTimer(SERVER_TIMEOUT, CleanUp);
 }
 
-public Action CleanUp(Handle timer)
-{
+public Action CleanUp(Handle timer) {
 	for (int i = 0; i < serverCount; i++) {
 		if (strlen(serverInfo[i]) == 0 && !socketError[i]) {
 			LogError("Server %s:%i is down: no timely reply received", serverAddress[i], serverPort[i]);
@@ -229,8 +233,7 @@ public Action CleanUp(Handle timer)
 	}
 }
 
-public void Advertise()
-{
+public void Advertise() {
 	char trigger[MAX_STR_LEN];
 	cv_hoptrigger.GetString(trigger, sizeof(trigger));
 
@@ -259,20 +262,17 @@ public void Advertise()
 	}
 }
 
-public void OnSocketConnected(Handle sock, any i)
-{
+public void OnSocketConnected(Handle sock, any i) {
 	char requestStr[ 25 ];
 	Format(requestStr, sizeof(requestStr), "%s", "\xFF\xFF\xFF\xFF\x54Source Engine Query");
 	SocketSend(sock, requestStr, 25);
 }
 
-int GetByte(char[] receiveData, int offset)
-{
+int GetByte(char[] receiveData, int offset) {
 	return receiveData[offset];
 }
 
-char GetString(char[] receiveData, int dataSize, int offset)
-{
+char GetString(char[] receiveData, int dataSize, int offset) {
 	char serverStr[MAX_STR_LEN] = "";
 	int j = 0;
 	for (int i = offset; i < dataSize; i++) {
@@ -285,8 +285,7 @@ char GetString(char[] receiveData, int dataSize, int offset)
 	return serverStr;
 }
 
-public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize, any i)
-{
+public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize, any i) {
 	char
 		srvName[MAX_STR_LEN]
 		, mapName[MAX_STR_LEN]
@@ -326,13 +325,11 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 	delete sock;
 }
 
-public void OnSocketDisconnected(Handle sock, any i)
-{
+public void OnSocketDisconnected(Handle sock, any i) {
 	delete sock;
 }
 
-public void OnSocketError(Handle sock, const int errorType, const int errorNum, any i)
-{
+public void OnSocketError(Handle sock, const int errorType, const int errorNum, any i) {
 	LogError("Server %s:%i is down: socket error %d (errno %d)", serverAddress[i], serverPort[i], errorType, errorNum);
 	socketError[i] = true;
 	delete sock;

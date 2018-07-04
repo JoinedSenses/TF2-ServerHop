@@ -11,7 +11,7 @@
 	"HopNotification"
 	{
 		"#format"	"{1:s},{2:s}"
-		"en"		"{1} is about to hop to {2} !"
+		"en"		"{1} has hopped to {2} !"
 	}
 	"Advert"
 	{

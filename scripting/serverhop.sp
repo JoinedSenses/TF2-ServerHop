@@ -156,6 +156,10 @@ public void OnClientAuthorized(int client, const char[] auth) {
 	}
 }
 
+public void OnClientDisconnect(int client) {
+	connectedFromFavorites[client] = false;
+}
+
 public Action ServerMenu(int client) {
 	char
 		serverNumStr[MAX_STR_LEN]

@@ -122,8 +122,9 @@ public void OnPluginStart() {
 	}
 }
 
-public void OnMapStart() {
-	lateLoad = false;
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
+	lateLoad = late;
+	return APLRes_Success;
 }
 
 public Action Command_Hop(int client, int args) {

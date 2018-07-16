@@ -9,7 +9,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.0"
+#define PLUGIN_VERSION "0.9.1"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
 #define SERVER_TIMEOUT 10.0
@@ -30,7 +30,8 @@ char
 	, server[MAXPLAYERS+1][MAX_INFO_LEN];
 bool
 	socketError[MAX_SERVERS]
-	, connectedFromFavorites[MAXPLAYERS+1];
+	, connectedFromFavorites[MAXPLAYERS+1]
+	, lateLoad = true;
 Handle
 	socket[MAX_SERVERS];
 ConVar
@@ -109,6 +110,20 @@ public void OnPluginStart() {
 	serverCount = i;
 
 	TriggerTimer(timer);
+	
+	if (lateLoad) {
+		char clientConnectMethod[64];
+		for (int client = 1; client <= MaxClients; client++) {
+			GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
+			if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {
+				connectedFromFavorites[client] = true;
+			}
+		}
+	}
+}
+
+public void OnMapStart() {
+	lateLoad = false;
 }
 
 public Action Command_Hop(int client, int args) {

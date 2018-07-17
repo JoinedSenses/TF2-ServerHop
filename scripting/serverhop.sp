@@ -114,9 +114,11 @@ public void OnPluginStart() {
 	if (lateLoad) {
 		char clientConnectMethod[64];
 		for (int client = 1; client <= MaxClients; client++) {
-			GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
-			if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {
-				connectedFromFavorites[client] = true;
+			if (IsClientInGame(client) && !IsFakeClient(client)) {
+				GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
+				if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {
+					connectedFromFavorites[client] = true;
+				}
 			}
 		}
 	}

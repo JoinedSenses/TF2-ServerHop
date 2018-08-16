@@ -9,7 +9,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.1"
+#define PLUGIN_VERSION "0.9.2"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
 #define SERVER_TIMEOUT 10.0
@@ -18,8 +18,8 @@
 //#define DEBUG
 
 int
-	serverCount = 0
-	, advertCount = 0
+	serverCount
+	, advertCount
 	, advertInterval = 1
 	, serverPort[MAX_SERVERS];
 char
@@ -56,28 +56,23 @@ public void OnPluginStart() {
 	cv_hoptrigger = CreateConVar(
 		"sm_hop_trigger",
 		"!servers",
-		"What players have to type in chat to activate the plugin (besides !hop)"
-	);
+		"What players have to type in chat to activate the plugin (besides !hop)");
 	cv_serverformat = CreateConVar(
 		"sm_hop_serverformat",
 		"%name - %map (%numplayers/%maxplayers)",
-		"Defines how the server info should be presented"
-	);
+		"Defines how the server info should be presented");
 	cv_broadcasthops = CreateConVar(
 		"sm_hop_broadcasthops",
 		"1",
-		"Set to 1 if you want a broadcast message when a player hops to another server"
-	);
+		"Set to 1 if you want a broadcast message when a player hops to another server");
 	cv_advert = CreateConVar(
 		"sm_hop_advertise",
 		"1",
-		"Set to 1 to enable server advertisements"
-	);
+		"Set to 1 to enable server advertisements");
 	cv_advert_interval = CreateConVar(
 		"sm_hop_advertisement_interval",
 		"1",
-		"Advertisement interval: advertise a server every x minute(s)"
-	);
+		"Advertisement interval: advertise a server every x minute(s)");
 
 	AutoExecConfig(true, "plugin.serverhop");
 
@@ -130,10 +125,6 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 }
 
 public Action Command_Hop(int client, int args) {
-	if (!connectedFromFavorites[client]) {
-		PrintToChat(client, "\x01[\x03ServerHop\x01] Due to game changes, this feature cannot be used because you didn't connect from \x03favorites\x01. To use this feature, add this server to your favorites and reconnect through the favorites panel.");
-		return Plugin_Handled;
-	}
 	ServerMenu(client);
 	return Plugin_Handled;
 }
@@ -182,7 +173,7 @@ public Action ServerMenu(int client) {
 	char
 		serverNumStr[MAX_STR_LEN]
 		, menuTitle[MAX_STR_LEN];
-	Menu menu = new Menu(MenuHandler, MENU_ACTIONS_DEFAULT);
+	Menu menu = new Menu(Menu_Handler, MENU_ACTIONS_DEFAULT);
 	Format(menuTitle, sizeof(menuTitle), "%T", "SelectServer", client);
 	menu.SetTitle(menuTitle);
 
@@ -199,7 +190,7 @@ public Action ServerMenu(int client) {
 	return Plugin_Handled;
 }
 
-public int MenuHandler(Menu menu, MenuAction action, int param1, int param2) {
+public int Menu_Handler(Menu menu, MenuAction action, int param1, int param2) {
 	if (action == MenuAction_Select) {
 		char infobuf[MAX_STR_LEN];
 
@@ -209,6 +200,12 @@ public int MenuHandler(Menu menu, MenuAction action, int param1, int param2) {
 		Format(menuTitle, sizeof(menuTitle), "%T", "AboutToJoinServer", param1);
 		Format(address[param1], MAX_STR_LEN, "%s:%i", serverAddress[serverNum], serverPort[serverNum]);
 		server[param1] = serverInfo[serverNum];
+
+		if (!connectedFromFavorites[param1]) {
+			PrintToChat(param1, "\x01[\x03ServerHop\x01] Due to Valve game change, clients must connect via favorites to be redirected by server.");
+			PrintToChat(param1, "\x01[\x03ServerHop\x01] %s:\x03 %s", server[param1], address[param1]);
+			return;
+		}
 
 		Panel panel = new Panel();
 		panel.SetTitle(menuTitle);
@@ -299,7 +296,7 @@ public void Advertise() {
 }
 
 public void OnSocketConnected(Handle sock, any i) {
-	char requestStr[ 25 ];
+	char requestStr[25];
 	Format(requestStr, sizeof(requestStr), "%s", "\xFF\xFF\xFF\xFF\x54Source Engine Query");
 	SocketSend(sock, requestStr, 25);
 }

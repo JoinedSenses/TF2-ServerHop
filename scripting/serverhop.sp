@@ -9,7 +9,8 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.2"
+#define PLUGIN_VERSION "0.9.3"
+#define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
 #define SERVER_TIMEOUT 10.0
@@ -18,33 +19,34 @@
 //#define DEBUG
 
 int
-	serverCount
-	, advertCount
-	, advertInterval = 1
-	, serverPort[MAX_SERVERS];
+	  g_iServerCount
+	, g_iAdvertCount
+	, g_iAdvertInterval = 1
+	, g_iServerPort[MAX_SERVERS];
 char
-	serverName[MAX_SERVERS][MAX_STR_LEN]
-	, serverAddress[MAX_SERVERS][MAX_STR_LEN]
-	, serverInfo[MAX_SERVERS][MAX_INFO_LEN]
-	, address[MAXPLAYERS+1][MAX_STR_LEN]
-	, server[MAXPLAYERS+1][MAX_INFO_LEN];
+	  g_sServerName[MAX_SERVERS][MAX_STR_LEN]
+	, g_sServerAddress[MAX_SERVERS][MAX_STR_LEN]
+	, g_sServerInfo[MAX_SERVERS][MAX_INFO_LEN]
+	, g_sAddress[MAXPLAYERS+1][MAX_STR_LEN]
+	, g_sServer[MAXPLAYERS+1][MAX_INFO_LEN];
 bool
-	socketError[MAX_SERVERS]
-	, connectedFromFavorites[MAXPLAYERS+1]
-	, lateLoad = true;
+	  g_bSocketError[MAX_SERVERS]
+	, g_bConnectedFromFavorites[MAXPLAYERS+1]
+	, g_bLateLoad
+	, g_bCoolDown;
 Handle
-	socket[MAX_SERVERS];
+	  g_hSocket[MAX_SERVERS];
 ConVar
-	cv_hoptrigger
-	, cv_serverformat
-	, cv_broadcasthops
-	, cv_advert
-	, cv_advert_interval;
+	  g_cvarHopTrigger
+	, g_cvarServerFormat
+	, g_cvarBroadcastHops
+	, g_cvarAdvert
+	, g_cvarAdvert_Interval;
 
 public Plugin myinfo = {
 	name = "Server Hop",
 	author = "[GRAVE] rig0r, JoinedSenses",
-	description = "Provides live server info with join option",
+	description = PLUGIN_DESCRIPTION,
 	version = PLUGIN_VERSION,
 	url = "https://github.com/JoinedSenses/TF2-ServerHop"
 };
@@ -52,24 +54,25 @@ public Plugin myinfo = {
 public void OnPluginStart() {
 	LoadTranslations("serverhop.phrases");
 
+	CreateConVar("sm_serverhop_version", PLUGIN_VERSION, PLUGIN_DESCRIPTION, FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_DONTRECORD).SetString(PLUGIN_VERSION);
   // convar setup
-	cv_hoptrigger = CreateConVar(
+	g_cvarHopTrigger = CreateConVar(
 		"sm_hop_trigger",
 		"!servers",
 		"What players have to type in chat to activate the plugin (besides !hop)");
-	cv_serverformat = CreateConVar(
+	g_cvarServerFormat = CreateConVar(
 		"sm_hop_serverformat",
 		"%name - %map (%numplayers/%maxplayers)",
 		"Defines how the server info should be presented");
-	cv_broadcasthops = CreateConVar(
+	g_cvarBroadcastHops = CreateConVar(
 		"sm_hop_broadcasthops",
 		"1",
 		"Set to 1 if you want a broadcast message when a player hops to another server");
-	cv_advert = CreateConVar(
+	g_cvarAdvert = CreateConVar(
 		"sm_hop_advertise",
 		"1",
 		"Set to 1 to enable server advertisements");
-	cv_advert_interval = CreateConVar(
+	g_cvarAdvert_Interval = CreateConVar(
 		"sm_hop_advertisement_interval",
 		"1",
 		"Advertisement interval: advertise a server every x minute(s)");
@@ -96,23 +99,23 @@ public void OnPluginStart() {
 	kv.Rewind();
 	kv.GotoFirstSubKey();
 	do {
-		kv.GetSectionName(serverName[i], MAX_STR_LEN);
-		kv.GetString("address", serverAddress[i], MAX_STR_LEN);
-		serverPort[i] = kv.GetNum("port", 27015);
+		kv.GetSectionName(g_sServerName[i], MAX_STR_LEN);
+		kv.GetString("address", g_sServerAddress[i], MAX_STR_LEN);
+		g_iServerPort[i] = kv.GetNum("port", 27015);
 		i++;
 	}
 	while (kv.GotoNextKey());
-	serverCount = i;
+	g_iServerCount = i;
 
 	TriggerTimer(timer);
 	
-	if (lateLoad) {
+	if (g_bLateLoad) {
 		char clientConnectMethod[64];
 		for (int client = 1; client <= MaxClients; client++) {
 			if (IsClientInGame(client) && !IsFakeClient(client)) {
 				GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
 				if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {
-					connectedFromFavorites[client] = true;
+					g_bConnectedFromFavorites[client] = true;
 				}
 			}
 		}
@@ -120,7 +123,7 @@ public void OnPluginStart() {
 }
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
-	lateLoad = late;
+	g_bLateLoad = late;
 	return APLRes_Success;
 }
 
@@ -147,7 +150,7 @@ public Action Command_Say(int client, int args) {
 	}
 
 	char trigger[MAX_STR_LEN];
-	cv_hoptrigger.GetString(trigger, sizeof(trigger));
+	g_cvarHopTrigger.GetString(trigger, sizeof(trigger));
 
 	if (strcmp(text[startidx], trigger, false) == 0 || strcmp(text[startidx], "!hop", false) == 0) {
 		ServerMenu(client);
@@ -161,12 +164,12 @@ public void OnClientAuthorized(int client, const char[] auth) {
 	char clientConnectMethod[64];
 	GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
 	if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {
-		connectedFromFavorites[client] = true;
+		g_bConnectedFromFavorites[client] = true;
 	}
 }
 
 public void OnClientDisconnect(int client) {
-	connectedFromFavorites[client] = false;
+	g_bConnectedFromFavorites[client] = false;
 }
 
 public Action ServerMenu(int client) {
@@ -177,13 +180,13 @@ public Action ServerMenu(int client) {
 	Format(menuTitle, sizeof(menuTitle), "%T", "SelectServer", client);
 	menu.SetTitle(menuTitle);
 
-	for (int i = 0; i < serverCount; i++) {
-		if (strlen(serverInfo[i]) > 0) {
+	for (int i = 0; i < g_iServerCount; i++) {
+		if (strlen(g_sServerInfo[i]) > 0) {
 			#if defined DEBUG then
-			PrintToConsole(client, serverInfo[i]);
+			PrintToConsole(client, g_sServerInfo[i]);
 			#endif
 			IntToString(i, serverNumStr, sizeof(serverNumStr));
-			menu.AddItem(serverNumStr, serverInfo[i]);
+			menu.AddItem(serverNumStr, g_sServerInfo[i]);
 		}
 	}
 	menu.Display(client, 20);
@@ -198,18 +201,18 @@ public int Menu_Handler(Menu menu, MenuAction action, int param1, int param2) {
 		int serverNum = StringToInt(infobuf);
 		char menuTitle[MAX_STR_LEN];
 		Format(menuTitle, sizeof(menuTitle), "%T", "AboutToJoinServer", param1);
-		Format(address[param1], MAX_STR_LEN, "%s:%i", serverAddress[serverNum], serverPort[serverNum]);
-		server[param1] = serverInfo[serverNum];
+		Format(g_sAddress[param1], MAX_STR_LEN, "%s:%i", g_sServerAddress[serverNum], g_iServerPort[serverNum]);
+		g_sServer[param1] = g_sServerInfo[serverNum];
 
-		if (!connectedFromFavorites[param1]) {
+		if (!g_bConnectedFromFavorites[param1]) {
 			PrintToChat(param1, "\x01[\x03ServerHop\x01] Due to Valve game change, clients must connect via favorites to be redirected by server.");
-			PrintToChat(param1, "\x01[\x03ServerHop\x01] %s:\x03 %s", server[param1], address[param1]);
+			PrintToChat(param1, "\x01[\x03ServerHop\x01] %s:\x03 %s", g_sServer[param1], g_sAddress[param1]);
 			return;
 		}
 
 		Panel panel = new Panel();
 		panel.SetTitle(menuTitle);
-		panel.DrawText(serverInfo[serverNum]);
+		panel.DrawText(g_sServerInfo[serverNum]);
 		panel.DrawText("Is this correct?");
 		panel.CurrentKey = 3;
 		panel.DrawItem("Accept");
@@ -222,75 +225,75 @@ public int Menu_Handler(Menu menu, MenuAction action, int param1, int param2) {
 
 public int MenuConfirmHandler(Menu menu, MenuAction action, int param1, int param2) {
 	if (param2 == 3) {
-		ClientCommand(param1, "redirect %s", address[param1]);
+		ClientCommand(param1, "redirect %s", g_sAddress[param1]);
 		// broadcast to all
-		if (cv_broadcasthops.BoolValue) {
+		if (g_cvarBroadcastHops.BoolValue) {
 			char clientName[MAX_NAME_LENGTH];
 			GetClientName(param1, clientName, sizeof(clientName));
-			PrintToChatAll("\x04[\x03hop\x04]\x01 %t", "HopNotification", clientName, server[param1]);
+			PrintToChatAll("\x01[\x03hop\x01] %t", "HopNotification", clientName, g_sServer[param1]);
 		}
 	}
-	address[param1] = "";
-	server[param1] = "";
+	g_sAddress[param1][0] = '\0';
+	g_sServer[param1][0] = '\0';
 }
 
 public Action RefreshServerInfo(Handle timer) {
-	for (int i = 0; i < serverCount; i++) {
-		serverInfo[i] = "";
-		socketError[i] = false;
-		socket[i] = SocketCreate(SOCKET_UDP, OnSocketError);
-		SocketSetArg(socket[i], i);
-		SocketConnect(socket[i], OnSocketConnected, OnSocketReceive, OnSocketDisconnected, serverAddress[i], serverPort[i]);
+	for (int i = 0; i < g_iServerCount; i++) {
+		g_sServerInfo[i][0] = '\0';
+		g_bSocketError[i] = false;
+		g_hSocket[i] = SocketCreate(SOCKET_UDP, OnSocketError);
+		SocketSetArg(g_hSocket[i], i);
+		SocketConnect(g_hSocket[i], OnSocketConnected, OnSocketReceive, OnSocketDisconnected, g_sServerAddress[i], g_iServerPort[i]);
 	}
 
 	CreateTimer(SERVER_TIMEOUT, CleanUp);
 }
 
 public Action CleanUp(Handle timer) {
-	for (int i = 0; i < serverCount; i++) {
-		if (strlen(serverInfo[i]) == 0 && !socketError[i]) {
-			LogError("Server %s:%i is down: no timely reply received", serverAddress[i], serverPort[i]);
-			delete socket[i];
+	for (int i = 0; i < g_iServerCount; i++) {
+		if (strlen(g_sServerInfo[i]) == 0 && !g_bSocketError[i]) {
+			LogError("Server %s:%i is down: no timely reply received", g_sServerAddress[i], g_iServerPort[i]);
+			delete g_hSocket[i];
 		}
 	}
 
   // all server info is up to date: advertise
-	if (cv_advert.BoolValue) {
-		if (advertInterval == cv_advert_interval.FloatValue) {
+	if (g_cvarAdvert.BoolValue) {
+		if (g_iAdvertInterval == g_cvarAdvert_Interval.FloatValue) {
 			Advertise();
 		}
-		advertInterval++;
-		if (advertInterval > cv_advert_interval.FloatValue) {
-			advertInterval = 1;
+		g_iAdvertInterval++;
+		if (g_iAdvertInterval > g_cvarAdvert_Interval.FloatValue) {
+			g_iAdvertInterval = 1;
 		}
 	}
 }
 
 public void Advertise() {
 	char trigger[MAX_STR_LEN];
-	cv_hoptrigger.GetString(trigger, sizeof(trigger));
+	g_cvarHopTrigger.GetString(trigger, sizeof(trigger));
 
 	// skip servers being marked as down
-	while (strlen(serverInfo[advertCount]) == 0) {
+	while (strlen(g_sServerInfo[g_iAdvertCount]) == 0) {
 		#if defined DEBUG then
-		LogError("Not advertising down server %i", advertCount);
+		LogError("Not advertising down server %i", g_iAdvertCount);
 		#endif
-		advertCount++;
-		if (advertCount >= serverCount) {
-			advertCount = 0;
+		g_iAdvertCount++;
+		if (g_iAdvertCount >= g_iServerCount) {
+			g_iAdvertCount = 0;
 			break;
 		}
 	}
 
-	if (strlen(serverInfo[advertCount]) > 0) {
-		PrintToChatAll("\x04[\x03hop\x04]\x01 %t", "Advert", serverInfo[advertCount], trigger);
+	if (strlen(g_sServerInfo[g_iAdvertCount]) > 0) {
+		PrintToChatAll("\x01[\x03hop\x01] %t", "Advert", g_sServerInfo[g_iAdvertCount], trigger);
 		#if defined DEBUG then
-		LogError("Advertising server %i (%s)", advertCount, serverInfo[advertCount]);
+		LogError("Advertising server %i (%s)", g_iAdvertCount, g_sServerInfo[g_iAdvertCount]);
 		#endif
 
-		advertCount++;
-		if (advertCount >= serverCount) {
-			advertCount = 0;
+		g_iAdvertCount++;
+		if (g_iAdvertCount >= g_iServerCount) {
+			g_iAdvertCount = 0;
 		}
 	}
 }
@@ -320,7 +323,7 @@ char GetString(char[] receiveData, int dataSize, int offset) {
 
 public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize, any i) {
 	char
-		srvName[MAX_STR_LEN]
+		  srvName[MAX_STR_LEN]
 		, mapName[MAX_STR_LEN]
 		, gameDir[MAX_STR_LEN]
 		, gameDesc[MAX_STR_LEN]
@@ -343,16 +346,16 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 	offset++;
 	IntToString(GetByte(receiveData, offset), maxPlayers, sizeof(maxPlayers));
 
-	cv_serverformat.GetString(format, sizeof(format));
-	ReplaceString(format, strlen(format), "%name", serverName[i], false);
+	g_cvarServerFormat.GetString(format, sizeof(format));
+	ReplaceString(format, strlen(format), "%name", g_sServerName[i], false);
 	ReplaceString(format, strlen(format), "%map", mapName, false);
 	ReplaceString(format, strlen(format), "%numplayers", numPlayers, false);
 	ReplaceString(format, strlen(format), "%maxplayers", maxPlayers, false);
 
-	serverInfo[i] = format;
+	g_sServerInfo[i] = format;
 
 	#if defined DEBUG then
-	LogError(serverInfo[i]);
+	LogError(g_sServerInfo[i]);
 	#endif
 
 	delete sock;
@@ -363,7 +366,16 @@ public void OnSocketDisconnected(Handle sock, any i) {
 }
 
 public void OnSocketError(Handle sock, const int errorType, const int errorNum, any i) {
-	LogError("Server %s:%i is down: socket error %d (errno %d)", serverAddress[i], serverPort[i], errorType, errorNum);
-	socketError[i] = true;
+	if (!g_bCoolDown) {
+		LogError("Server %s:%i is down: socket error %d (errno %d)", g_sServerAddress[i], g_iServerPort[i], errorType, errorNum);
+		CreateTimer(600.0, timerErrorCooldown);
+		g_bCoolDown = true;
+	}
+	
+	g_bSocketError[i] = true;
 	delete sock;
+}
+
+Action timerErrorCooldown(Handle timer) {
+	g_bCoolDown = false;
 }

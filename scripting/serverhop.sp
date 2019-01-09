@@ -102,9 +102,8 @@ public void OnPluginStart() {
 		kv.GetSectionName(g_sServerName[i], MAX_STR_LEN);
 		kv.GetString("address", g_sServerAddress[i], MAX_STR_LEN);
 		g_iServerPort[i] = kv.GetNum("port", 27015);
-		i++;
 	}
-	while (kv.GotoNextKey() && i < MAX_SERVERS);
+	while (kv.GotoNextKey() && i++ < MAX_SERVERS);
 
 	if (i == MAX_SERVERS) {
 		LogError("You have hit the cap for max servers. If you want to add more, edit the plugin, increase MAX_SERVERS and recompile.");

@@ -104,7 +104,12 @@ public void OnPluginStart() {
 		g_iServerPort[i] = kv.GetNum("port", 27015);
 		i++;
 	}
-	while (kv.GotoNextKey());
+	while (kv.GotoNextKey() && i < MAX_SERVERS);
+
+	if (i == MAX_SERVERS) {
+		LogError("You have hit the cap for max servers. If you want to add more, edit the plugin, increase MAX_SERVERS and recompile.");
+	}
+	
 	g_iServerCount = i;
 
 	TriggerTimer(timer);
@@ -131,6 +136,7 @@ public Action Command_Hop(int client, int args) {
 	ServerMenu(client);
 	return Plugin_Handled;
 }
+
 public Action Command_Servers(int client, int args) {
 	ServerMenu(client);
 	return Plugin_Handled;

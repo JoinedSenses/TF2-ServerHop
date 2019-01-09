@@ -1,5 +1,7 @@
 ## ServerHop - by [GRAVE] rig0r
-This is a fix to ServerHop SourceMod plugin due to valve changing the default value of cl_showpluginmessages
+This is a fix to ServerHop SourceMod plugin due to valve changing the default value of cl_showpluginmessages  
+
+By default, this plugin has a hardcoded value of 10 MAX_SERVERS. To increase this, you must edit the plugin and recompile.  
 
 ### Installation
 ```

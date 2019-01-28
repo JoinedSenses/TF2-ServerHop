@@ -5,7 +5,7 @@ By default, this plugin has a hardcoded value of 10 MAX_SERVERS. To increase thi
 
 ### Installation
 ```
-Install the Socket extension on your server. Get it here: http://forums.alliedmods.net/showthread.php?t=67640  
+Install the Socket extension on your server. (http://forums.alliedmods.net/showthread.php?t=67640)  
 Download files from repo and add to your sourcemod directory  
 Stick your servers into sourcemod/config/serverhop.cfg  
 Activate the plugin by refreshing (sm plugins refresh) or restarting your server  

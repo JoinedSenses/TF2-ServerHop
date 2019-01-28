@@ -9,14 +9,13 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.4"
+#define PLUGIN_VERSION "0.9.5"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
 #define SERVER_TIMEOUT 10.0
 #define MAX_STR_LEN 160
 #define MAX_INFO_LEN 200
-// #define DEBUG
 
 int
 	  g_iServerCount
@@ -52,10 +51,6 @@ public Plugin myinfo = {
 };
 
 public void OnPluginStart() {
-	#if defined DEBUG then
-	LogError("OnPluginStart: beginning.");
-	#endif
-
 	LoadTranslations("serverhop.phrases");
 
 	CreateConVar("sm_serverhop_version", PLUGIN_VERSION, PLUGIN_DESCRIPTION, FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_DONTRECORD).SetString(PLUGIN_VERSION);
@@ -63,23 +58,28 @@ public void OnPluginStart() {
 	g_cvarHopTrigger = CreateConVar(
 		"sm_hop_trigger",
 		"!servers",
-		"What players have to type in chat to activate the plugin (besides !hop)");
+		"What players have to type in chat to activate the plugin (besides !hop)"
+	);
 	g_cvarServerFormat = CreateConVar(
 		"sm_hop_serverformat",
 		"%name - %map (%numplayers/%maxplayers)",
-		"Defines how the server info should be presented");
+		"Defines how the server info should be presented"
+	);
 	g_cvarBroadcastHops = CreateConVar(
 		"sm_hop_broadcasthops",
 		"1",
-		"Set to 1 if you want a broadcast message when a player hops to another server");
+		"Set to 1 if you want a broadcast message when a player hops to another server"
+	);
 	g_cvarAdvert = CreateConVar(
 		"sm_hop_advertise",
 		"1",
-		"Set to 1 to enable server advertisements");
+		"Set to 1 to enable server advertisements"
+	);
 	g_cvarAdvert_Interval = CreateConVar(
 		"sm_hop_advertisement_interval",
 		"1",
-		"Advertisement interval: advertise a server every x minute(s)");
+		"Advertisement interval: advertise a server every x minute(s)"
+	);
 
 	AutoExecConfig(true, "plugin.serverhop");
 
@@ -97,78 +97,41 @@ public void OnPluginStart() {
 
 	if (!kv.ImportFromFile(path)) {
 		LogToGame("Error loading server list");
-		#if defined DEBUG then
-		LogError("OnPluginStart: Error loading KV file from path %s", path);
-		#else
 		SetFailState("Unable to import server list from file.");
-		#endif
 	}
 
-	int i = 0;
+	int i;
 	kv.Rewind();
 	if (!kv.GotoFirstSubKey()) {
-		#if defined DEBUG then
-		LogError("OnPluginStart-FailState: Unable to find first server in file.");
-		#else
-		SetFailState("Unable to find first server in file.");
-		#endif
+		SetFailState("Unable to find first server in file.");	
 	}
 	
 	do {
 		kv.GetSectionName(g_sServerName[i], MAX_STR_LEN);
 		kv.GetString("address", g_sServerAddress[i], MAX_STR_LEN);
 		g_iServerPort[i] = kv.GetNum("port", 27015);
-		#if defined DEBUG then
-		LogError("OnPluginStart: Load KV #%i - Name %s, Address %s, Port %i", i, g_sServerName[i], g_sServerAddress[i], g_iServerPort[i]);
-		#endif
-		i++;
-	}
-	while (kv.GotoNextKey() && i < MAX_SERVERS);
+	} while (++i < MAX_SERVERS && kv.GotoNextKey());
 
-	if (i == MAX_SERVERS) {
-		LogError("You have hit the cap for max servers. If you want to add more, edit the plugin, increase MAX_SERVERS and recompile.");
+	if (i == MAX_SERVERS && kv.GotoNextKey()) {
+		LogError("You have exceeded the cap for max servers of %i. To add more, edit the value of MAX_SERVERS and recompile.", MAX_SERVERS);
 	}
 	
 	g_iServerCount = i;
-	#if defined DEBUG then
-	LogError("OnPluginStart: KV file server count total/max = %i/%i", i, MAX_SERVERS);
-	#endif
 
 	TriggerTimer(timer);
 	
 	if (g_bLateLoad) {
 		char clientConnectMethod[64];
-		#if defined DEBUG then
-		LogError("OnPluginStart: LateLoad = true.");
-		#endif
 		for (int client = 1; client <= MaxClients; client++) {
 			if (IsClientInGame(client) && !IsFakeClient(client)) {
 				GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
+
 				if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {
 					g_bConnectedFromFavorites[client] = true;
-					#if defined DEBUG then
-					LogError("OnPluginStart: Client #%i connected from favorites.", client);
-					#endif
-				}
-				else
-				{
-					#if defined DEBUG then
-					LogError("OnPluginStart: Client #%i NOT connected from favorites.", client);
-					#endif
 				}
 			}
 		}
 	}
-	else
-	{
-		#if defined DEBUG then
-		LogError("OnPluginStart: LateLoad = false.");
-		#endif
-	}
-	#if defined DEBUG then
-	LogError("OnPluginStart: complete.");
-	#endif
-
 }
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
@@ -194,7 +157,7 @@ public Action Command_Say(int client, int args) {
 		return Plugin_Continue;
 	}
 
-	if (text[strlen(text) - 1] == '"') {
+	if (text[strlen(text) - 1] == '\"') {
 		text[strlen(text)-1] = '\0';
 		startidx = 1;
 	}
@@ -215,15 +178,6 @@ public void OnClientAuthorized(int client, const char[] auth) {
 	GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
 	if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {
 		g_bConnectedFromFavorites[client] = true;
-		#if defined DEBUG then
-		LogError("OnClientAuthorized: Client #%i connected from favorites.", client);
-		#endif
-	}
-	else
-	{
-		#if defined DEBUG then
-		LogError("OnClientAuthorized: Client #%i NOT connected from favorites.", client);
-		#endif
 	}
 }
 
@@ -232,13 +186,8 @@ public void OnClientDisconnect(int client) {
 }
 
 public Action ServerMenu(int client) {
-	char
-		serverNumStr[MAX_STR_LEN]
-		, menuTitle[MAX_STR_LEN];
-		
-	#if defined DEBUG then
-	LogError("ServerMenu");
-	#endif
+	char serverNumStr[MAX_STR_LEN];
+	char menuTitle[MAX_STR_LEN];
 
 	Menu menu = new Menu(Menu_Handler, MENU_ACTIONS_DEFAULT);
 	Format(menuTitle, sizeof(menuTitle), "%T", "SelectServer", client);
@@ -246,17 +195,11 @@ public Action ServerMenu(int client) {
 
 	for (int i = 0; i < g_iServerCount; i++) {
 		if (strlen(g_sServerInfo[i]) > 0) {
-			#if defined DEBUG then
-			LogError("ServerMenu - AddMenuItem: %s (%i)", g_sServerInfo[i], i);
-			#endif
 			IntToString(i, serverNumStr, sizeof(serverNumStr));
 			menu.AddItem(serverNumStr, g_sServerInfo[i]);
 		}
 	}
 	menu.Display(client, 20);
-	#if defined DEBUG then
-	LogError("ServerMenu: Displayed.");
-	#endif
 	return Plugin_Handled;
 }
 
@@ -305,10 +248,6 @@ public int MenuConfirmHandler(Menu menu, MenuAction action, int param1, int para
 }
 
 public Action RefreshServerInfo(Handle timer) {
-	#if defined DEBUG then
-	LogError("RefreshServerInfo");
-	#endif
-
 	for (int i = 0; i < g_iServerCount; i++) {
 		g_sServerInfo[i][0] = '\0';
 		g_bSocketError[i] = false;
@@ -321,13 +260,9 @@ public Action RefreshServerInfo(Handle timer) {
 }
 
 public Action CleanUp(Handle timer) {
-	#if defined DEBUG then
-	LogError("CleanUp");
-	#endif
-
 	for (int i = 0; i < g_iServerCount; i++) {
 		if (strlen(g_sServerInfo[i]) == 0 && !g_bSocketError[i]) {
-			LogError("CleanUp: Server %s:%i is down, no reply received within %i seconds.", g_sServerAddress[i], g_iServerPort[i], SERVER_TIMEOUT);
+			LogError("Server %s:%i is down, no reply received within %i seconds.", g_sServerAddress[i], g_iServerPort[i], SERVER_TIMEOUT);
 			delete g_hSocket[i];
 		}
 	}
@@ -350,11 +285,7 @@ public void Advertise() {
 
 	// skip servers being marked as down
 	while (strlen(g_sServerInfo[g_iAdvertCount]) == 0) {
-		#if defined DEBUG then
-		LogError("Advertise: Server down, info empty %i", g_iAdvertCount);
-		#endif
-		g_iAdvertCount++;
-		if (g_iAdvertCount >= g_iServerCount) {
+		if (++g_iAdvertCount >= g_iServerCount) {
 			g_iAdvertCount = 0;
 			break;
 		}
@@ -362,12 +293,8 @@ public void Advertise() {
 
 	if (strlen(g_sServerInfo[g_iAdvertCount]) > 0) {
 		PrintToChatAll("\x01[\x03hop\x01] %t", "Advert", g_sServerInfo[g_iAdvertCount], trigger);
-		#if defined DEBUG then
-		LogError("Advertise: Print servers to chat %i (%s)", g_iAdvertCount, g_sServerInfo[g_iAdvertCount]);
-		#endif
 
-		g_iAdvertCount++;
-		if (g_iAdvertCount >= g_iServerCount) {
+		if (++g_iAdvertCount >= g_iServerCount) {
 			g_iAdvertCount = 0;
 		}
 	}
@@ -375,9 +302,6 @@ public void Advertise() {
 
 public void OnSocketConnected(Handle sock, any i) {
 	char requestStr[25];
-	#if defined DEBUG then
-	LogError("OnSocketConnected: Server #%i.", i);
-	#endif
 	Format(requestStr, sizeof(requestStr), "%s", "\xFF\xFF\xFF\xFF\x54Source Engine Query");
 	SocketSend(sock, requestStr, 25);
 }
@@ -400,34 +324,32 @@ char GetString(char[] receiveData, int dataSize, int offset) {
 }
 
 public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize, any i) {
-	char
-		  srvName[MAX_STR_LEN]
-		, mapName[MAX_STR_LEN]
-		, gameDir[MAX_STR_LEN]
-		, gameDesc[MAX_STR_LEN]
-		, numPlayers[MAX_STR_LEN]
-		, maxPlayers[MAX_STR_LEN]
-		, format[MAX_STR_LEN];
-
-	#if defined DEBUG then
-	LogError("OnSocketReceive: Server #%i.", i);
-	#endif
-
 	// parse server info
 	int offset = 2;
+	char srvName[MAX_STR_LEN];
 	srvName = GetString(receiveData, dataSize, offset);
 	offset += strlen(srvName) + 1;
+
+	char mapName[MAX_STR_LEN];
 	mapName = GetString(receiveData, dataSize, offset);
 	offset += strlen(mapName) + 1;
+
+	char gameDir[MAX_STR_LEN];
 	gameDir = GetString(receiveData, dataSize, offset);
 	offset += strlen(gameDir) + 1;
+
+	char gameDesc[MAX_STR_LEN];
 	gameDesc = GetString(receiveData, dataSize, offset);
 	offset += strlen(gameDesc) + 1;
+
 	offset += 2;
+	char numPlayers[MAX_STR_LEN];
 	IntToString(GetByte(receiveData, offset), numPlayers, sizeof(numPlayers));
 	offset++;
+	char maxPlayers[MAX_STR_LEN];
 	IntToString(GetByte(receiveData, offset), maxPlayers, sizeof(maxPlayers));
 
+	char format[MAX_STR_LEN];
 	g_cvarServerFormat.GetString(format, sizeof(format));
 	ReplaceString(format, strlen(format), "%name", g_sServerName[i], false);
 	ReplaceString(format, strlen(format), "%map", mapName, false);
@@ -436,18 +358,10 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 
 	g_sServerInfo[i] = format;
 
-	#if defined DEBUG then
-	LogError("OnSocketReceive: Server #%i info saved: %s", i, format);
-	#endif
-
 	delete sock;
 }
 
 public void OnSocketDisconnected(Handle sock, any i) {
-	#if defined DEBUG then
-	LogError("OnSocketDisconnected: Server #%i.", i);
-	#endif
-
 	delete sock;
 }
 

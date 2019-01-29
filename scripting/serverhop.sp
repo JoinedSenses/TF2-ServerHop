@@ -1,9 +1,3 @@
-/*
-**
-** Server Hop (c) 2009, 2010 [GRAVE] rig0r
-**       www.gravedigger-company.nl
-**
-*/
 #pragma semicolon 1
 #pragma newdecls required
 #include <sourcemod>
@@ -157,7 +151,7 @@ public Action Command_Say(int client, int args) {
 		return Plugin_Continue;
 	}
 
-	if (text[strlen(text) - 1] == '\"') {
+	if (text[strlen(text)-1] == '\"') {
 		text[strlen(text)-1] = '\0';
 		startidx = 1;
 	}
@@ -267,13 +261,12 @@ public Action CleanUp(Handle timer) {
 		}
 	}
 
-  // all server info is up to date: advertise
+	// all server info is up to date: advertise
 	if (g_cvarAdvert.BoolValue) {
 		if (g_iAdvertInterval == g_cvarAdvert_Interval.FloatValue) {
 			Advertise();
 		}
-		g_iAdvertInterval++;
-		if (g_iAdvertInterval > g_cvarAdvert_Interval.FloatValue) {
+		if (++g_iAdvertInterval > g_cvarAdvert_Interval.FloatValue) {
 			g_iAdvertInterval = 1;
 		}
 	}
@@ -314,8 +307,7 @@ char GetString(char[] receiveData, int dataSize, int offset) {
 	char serverStr[MAX_STR_LEN] = "";
 	int j = 0;
 	for (int i = offset; i < dataSize; i++) {
-		serverStr[j] = receiveData[i];
-		j++;
+		serverStr[j++] = receiveData[i];
 		if (receiveData[i] == '\x0') {
 			break;
 		}

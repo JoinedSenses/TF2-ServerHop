@@ -109,6 +109,8 @@ public void OnPluginStart() {
 	if (i == MAX_SERVERS && kv.GotoNextKey()) {
 		LogError("You have exceeded the cap for max servers of %i. To add more, edit the value of MAX_SERVERS and recompile.", MAX_SERVERS);
 	}
+
+	delete kv;
 	
 	g_iServerCount = i;
 

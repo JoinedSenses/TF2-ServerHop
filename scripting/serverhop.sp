@@ -44,6 +44,16 @@ public Plugin myinfo = {
 	url = "https://github.com/JoinedSenses/TF2-ServerHop"
 };
 
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
+	if (GetEngineVersion() == Engine_CSGO) {
+		strcopy(error, err_max, "ServerHop is incompatible with this game");
+		return APLRes_SilentFailure;		
+	}
+
+	g_bLateLoad = late;
+	return APLRes_Success;
+}
+
 public void OnPluginStart() {
 	LoadTranslations("serverhop.phrases");
 
@@ -128,11 +138,6 @@ public void OnPluginStart() {
 			}
 		}
 	}
-}
-
-public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
-	g_bLateLoad = late;
-	return APLRes_Success;
 }
 
 public Action Command_Hop(int client, int args) {

@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.5"
+#define PLUGIN_VERSION "0.9.6"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
@@ -263,7 +263,7 @@ public Action RefreshServerInfo(Handle timer) {
 public Action CleanUp(Handle timer) {
 	for (int i = 0; i < g_iServerCount; i++) {
 		if (strlen(g_sServerInfo[i]) == 0 && !g_bSocketError[i]) {
-			LogError("Server %s:%i is down, no reply received within %i seconds.", g_sServerAddress[i], g_iServerPort[i], SERVER_TIMEOUT);
+			LogError("Server %s:%i is down, no reply received within %0.0f seconds.", g_sServerAddress[i], g_iServerPort[i], SERVER_TIMEOUT);
 			delete g_hSocket[i];
 		}
 	}

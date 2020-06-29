@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.6"
+#define PLUGIN_VERSION "0.9.7"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
@@ -231,6 +231,9 @@ public int Menu_Handler(Menu menu, MenuAction action, int param1, int param2) {
 		panel.Send(param1, MenuConfirmHandler, 15);
 
 		delete panel;
+	}
+	else if (action == MenuAction_End) {
+		delete menu;
 	}
 }
 

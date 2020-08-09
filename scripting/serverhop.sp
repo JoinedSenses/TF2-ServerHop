@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.7"
+#define PLUGIN_VERSION "0.9.8"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
@@ -174,7 +174,7 @@ public Action Command_Say(int client, int args) {
 }
 
 
-public void OnClientAuthorized(int client, const char[] auth) {
+public void OnClientPutInServer(int client) {
 	char clientConnectMethod[64];
 	GetClientInfo(client, "cl_connectmethod", clientConnectMethod, sizeof(clientConnectMethod));
 	if (!StrEqual(clientConnectMethod, "serverbrowser_internet")) {

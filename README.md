@@ -3,6 +3,10 @@ This is a fix to ServerHop SourceMod plugin due to valve changing the default va
 
 By default, this plugin has a hardcoded value of 10 MAX_SERVERS. To increase this, you must edit the plugin and recompile.  
 
+### Dependencies
+SM 1.10+  
+Socket https://github.com/JoinedSenses/sm-ext-socket/  
+  
 ### Installation
 ```
 Install the Socket extension on your server. (http://forums.alliedmods.net/showthread.php?t=67640)  

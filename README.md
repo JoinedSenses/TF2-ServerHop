@@ -34,3 +34,11 @@ sm_hop_broadcasthops
   set to 1 to have the plugin display a message to all when a player hops to another server  
   default: 1 
 ``` 
+
+### Available format specifiers for `sm_hop_serverformat`  
+- %name  
+- %map  
+- %numplayers  
+- %maxplayers  
+- %humans  
+- %bots  

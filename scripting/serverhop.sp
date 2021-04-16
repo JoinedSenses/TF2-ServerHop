@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.8"
+#define PLUGIN_VERSION "0.9.9"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
@@ -12,29 +12,29 @@
 #define MAX_INFO_LEN 200
 
 int
-	  g_iServerCount
-	, g_iAdvertCount
-	, g_iAdvertInterval = 1
-	, g_iServerPort[MAX_SERVERS];
+	g_iServerCount,
+	g_iAdvertCount,
+	g_iAdvertInterval = 1,
+	g_iServerPort[MAX_SERVERS];
 char
-	  g_sServerName[MAX_SERVERS][MAX_STR_LEN]
-	, g_sServerAddress[MAX_SERVERS][MAX_STR_LEN]
-	, g_sServerInfo[MAX_SERVERS][MAX_INFO_LEN]
-	, g_sAddress[MAXPLAYERS+1][MAX_STR_LEN]
-	, g_sServer[MAXPLAYERS+1][MAX_INFO_LEN];
+	g_sServerName[MAX_SERVERS][MAX_STR_LEN],
+	g_sServerAddress[MAX_SERVERS][MAX_STR_LEN],
+	g_sServerInfo[MAX_SERVERS][MAX_INFO_LEN],
+	g_sAddress[MAXPLAYERS+1][MAX_STR_LEN],
+	g_sServer[MAXPLAYERS+1][MAX_INFO_LEN];
 bool
-	  g_bSocketError[MAX_SERVERS]
-	, g_bConnectedFromFavorites[MAXPLAYERS+1]
-	, g_bLateLoad
-	, g_bCoolDown;
+	g_bSocketError[MAX_SERVERS],
+	g_bConnectedFromFavorites[MAXPLAYERS+1],
+	g_bLateLoad,
+	g_bCoolDown;
 Handle
-	  g_hSocket[MAX_SERVERS];
+	g_hSocket[MAX_SERVERS];
 ConVar
-	  g_cvarHopTrigger
-	, g_cvarServerFormat
-	, g_cvarBroadcastHops
-	, g_cvarAdvert
-	, g_cvarAdvert_Interval;
+	g_cvarHopTrigger,
+	g_cvarServerFormat,
+	g_cvarBroadcastHops,
+	g_cvarAdvert,
+	g_cvarAdvert_Interval;
 
 public Plugin myinfo = {
 	name = "Server Hop",
@@ -345,11 +345,21 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 	offset += strlen(gameDesc) + 1;
 
 	offset += 2;
-	char numPlayers[MAX_STR_LEN];
-	IntToString(GetByte(receiveData, offset), numPlayers, sizeof(numPlayers));
-	offset++;
-	char maxPlayers[MAX_STR_LEN];
+	char numPlayers[4];
+	int players = GetByte(receiveData, offset);
+	IntToString(players, numPlayers, sizeof(numPlayers));
+
+	++offset;
+	char maxPlayers[4];
 	IntToString(GetByte(receiveData, offset), maxPlayers, sizeof(maxPlayers));
+
+	++offset;
+	char numBots[4];
+	int bots = GetByte(receiveData, offset);
+	IntToString(bots, numBots, sizeof(numBots));
+
+	char humans[4];
+	IntToString(players - bots, humans, sizeof(humans));
 
 	char format[MAX_STR_LEN];
 	g_cvarServerFormat.GetString(format, sizeof(format));
@@ -357,6 +367,8 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 	ReplaceString(format, strlen(format), "%map", mapName, false);
 	ReplaceString(format, strlen(format), "%numplayers", numPlayers, false);
 	ReplaceString(format, strlen(format), "%maxplayers", maxPlayers, false);
+	ReplaceString(format, strlen(format), "%humans", humans, false);
+	ReplaceString(format, strlen(format), "%bots", numBots, false);
 
 	g_sServerInfo[i] = format;
 

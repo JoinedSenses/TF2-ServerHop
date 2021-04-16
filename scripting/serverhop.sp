@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.9"
+#define PLUGIN_VERSION "0.9.10"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
@@ -47,7 +47,7 @@ public Plugin myinfo = {
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
 	if (GetEngineVersion() == Engine_CSGO) {
 		strcopy(error, err_max, "ServerHop is incompatible with this game");
-		return APLRes_SilentFailure;		
+		return APLRes_SilentFailure;
 	}
 
 	g_bLateLoad = late;
@@ -107,9 +107,9 @@ public void OnPluginStart() {
 	int i;
 	kv.Rewind();
 	if (!kv.GotoFirstSubKey()) {
-		SetFailState("Unable to find first server in file.");	
+		SetFailState("Unable to find first server in file.");
 	}
-	
+
 	do {
 		kv.GetSectionName(g_sServerName[i], MAX_STR_LEN);
 		kv.GetString("address", g_sServerAddress[i], MAX_STR_LEN);
@@ -121,11 +121,11 @@ public void OnPluginStart() {
 	}
 
 	delete kv;
-	
+
 	g_iServerCount = i;
 
 	TriggerTimer(timer);
-	
+
 	if (g_bLateLoad) {
 		char clientConnectMethod[64];
 		for (int client = 1; client <= MaxClients; client++) {
@@ -347,7 +347,8 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 
 	++offset;
 	char maxPlayers[4];
-	IntToString(receiveData[offset], maxPlayers, sizeof(maxPlayers));
+	int max = receiveData[offset];
+	IntToString(max, maxPlayers, sizeof(maxPlayers));
 
 	++offset;
 	char numBots[4];
@@ -357,6 +358,12 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 	char humans[4];
 	IntToString(players - bots, humans, sizeof(humans));
 
+	char maxHumans[4];
+	IntToString(max - bots, maxHumans, sizeof(maxPlayers));
+
+	char maxBots[4];
+	IntToString(max - players, maxBots, sizeof(maxBots));
+
 	char format[MAX_STR_LEN];
 	g_cvarServerFormat.GetString(format, sizeof(format));
 	ReplaceString(format, strlen(format), "%name", g_sServerName[i], false);
@@ -365,6 +372,8 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 	ReplaceString(format, strlen(format), "%maxplayers", maxPlayers, false);
 	ReplaceString(format, strlen(format), "%humans", humans, false);
 	ReplaceString(format, strlen(format), "%bots", numBots, false);
+	ReplaceString(format, strlen(format), "%maxhumans", maxHumans, false);
+	ReplaceString(format, strlen(format), "%maxbots", maxBots, false);
 
 	g_sServerInfo[i] = format;
 
@@ -381,7 +390,7 @@ public void OnSocketError(Handle sock, const int errorType, const int errorNum, 
 		CreateTimer(600.0, timerErrorCooldown);
 		g_bCoolDown = true;
 	}
-	
+
 	g_bSocketError[i] = true;
 	delete sock;
 }

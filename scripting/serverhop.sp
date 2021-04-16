@@ -309,10 +309,6 @@ public void OnSocketConnected(Handle sock, any i) {
 	SocketSend(sock, requestStr, 25);
 }
 
-int GetByte(char[] receiveData, int offset) {
-	return receiveData[offset];
-}
-
 char GetString(char[] receiveData, int dataSize, int offset) {
 	char serverStr[MAX_STR_LEN] = "";
 	int j = 0;
@@ -346,16 +342,16 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 
 	offset += 2;
 	char numPlayers[4];
-	int players = GetByte(receiveData, offset);
+	int players = receiveData[offset];
 	IntToString(players, numPlayers, sizeof(numPlayers));
 
 	++offset;
 	char maxPlayers[4];
-	IntToString(GetByte(receiveData, offset), maxPlayers, sizeof(maxPlayers));
+	IntToString(receiveData[offset], maxPlayers, sizeof(maxPlayers));
 
 	++offset;
 	char numBots[4];
-	int bots = GetByte(receiveData, offset);
+	int bots = receiveData[offset];
 	IntToString(bots, numBots, sizeof(numBots));
 
 	char humans[4];

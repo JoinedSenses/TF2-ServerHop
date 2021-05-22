@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.9"
+#define PLUGIN_VERSION "0.9.10"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
@@ -255,6 +255,7 @@ public Action RefreshServerInfo(Handle timer) {
 	for (int i = 0; i < g_iServerCount; i++) {
 		g_sServerInfo[i][0] = '\0';
 		g_bSocketError[i] = false;
+		delete g_hSocket[i];
 		g_hSocket[i] = SocketCreate(SOCKET_UDP, OnSocketError);
 		SocketSetArg(g_hSocket[i], i);
 		SocketConnect(g_hSocket[i], OnSocketConnected, OnSocketReceive, OnSocketDisconnected, g_sServerAddress[i], g_iServerPort[i]);
@@ -322,11 +323,16 @@ char GetString(char[] receiveData, int dataSize, int offset) {
 }
 
 public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize, any i) {
+	delete g_hSocket[i];
+
 	// parse server info
 	int offset = 2;
+
 	char srvName[MAX_STR_LEN];
 	srvName = GetString(receiveData, dataSize, offset);
 	offset += strlen(srvName) + 1;
+
+	if (offset >= dataSize) ThrowError("Failed to perform A2S_INFO query. Probable cause is network/firewall issue.");
 
 	char mapName[MAX_STR_LEN];
 	mapName = GetString(receiveData, dataSize, offset);
@@ -338,18 +344,17 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 
 	char gameDesc[MAX_STR_LEN];
 	gameDesc = GetString(receiveData, dataSize, offset);
-	offset += strlen(gameDesc) + 1;
+	offset += strlen(gameDesc) + 1 + 2; // add 2 for next data
 
-	offset += 2;
 	char numPlayers[4];
 	int players = receiveData[offset];
 	IntToString(players, numPlayers, sizeof(numPlayers));
-
 	++offset;
+
 	char maxPlayers[4];
 	IntToString(receiveData[offset], maxPlayers, sizeof(maxPlayers));
-
 	++offset;
+
 	char numBots[4];
 	int bots = receiveData[offset];
 	IntToString(bots, numBots, sizeof(numBots));
@@ -367,12 +372,10 @@ public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize,
 	ReplaceString(format, strlen(format), "%bots", numBots, false);
 
 	g_sServerInfo[i] = format;
-
-	delete sock;
 }
 
 public void OnSocketDisconnected(Handle sock, any i) {
-	delete sock;
+	delete g_hSocket[i];
 }
 
 public void OnSocketError(Handle sock, const int errorType, const int errorNum, any i) {
@@ -383,7 +386,7 @@ public void OnSocketError(Handle sock, const int errorType, const int errorNum, 
 	}
 	
 	g_bSocketError[i] = true;
-	delete sock;
+	delete g_hSocket[i];
 }
 
 Action timerErrorCooldown(Handle timer) {

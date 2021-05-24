@@ -125,14 +125,13 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 
 	int offset = 4; // begin at 5th byte, index 4
 
-		// Begin
 	int header = GetByte(data, offset);
 
 	if (header == 'A') {
 		static char reply[A2S_SIZE + 4];
 
 		reply = A2S_INFO;
-		for (int i = 25, j = 5; i < 29; ++i, ++j) {
+		for (int i = A2S_SIZE, j = offset; i < sizeof(reply); ++i, ++j) {
 			PrintToConsole(arg, "%i", (reply[i] = data[j]));
 		}
 		

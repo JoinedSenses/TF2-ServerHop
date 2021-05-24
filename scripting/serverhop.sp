@@ -3,13 +3,18 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "0.9.10"
+#define PLUGIN_VERSION "1.0.0"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
 #define SERVER_TIMEOUT 10.0
 #define MAX_STR_LEN 160
 #define MAX_INFO_LEN 200
+
+#define A2S_INFO "\xFF\xFF\xFF\xFF\x54Source Engine Query"
+#define A2S_SIZE 25
+
+#define MAX_STR_LEN 160
 
 int
 	g_iServerCount,
@@ -306,72 +311,120 @@ public void Advertise() {
 
 public void OnSocketConnected(Handle sock, any i) {
 	char requestStr[25];
-	Format(requestStr, sizeof(requestStr), "%s", "\xFF\xFF\xFF\xFF\x54Source Engine Query");
-	SocketSend(sock, requestStr, 25);
+	Format(requestStr, sizeof(requestStr), "%s", A2S_INFO);
+	SocketSend(sock, requestStr, sizeof(requestStr));
 }
 
-char GetString(char[] receiveData, int dataSize, int offset) {
-	char serverStr[MAX_STR_LEN] = "";
-	int j = 0;
-	for (int i = offset; i < dataSize; i++) {
-		serverStr[j++] = receiveData[i];
-		if (receiveData[i] == '\x0') {
-			break;
-		}
-	}
-	return serverStr;
-}
+public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any arg) {
+	/** ==== Request Format
+	 * \xFF\xFF\xFF\xFF --------------- | Long
+	 * Header: 'T' -------------------- | Byte
+	 * Payload: "Source Engine Query\0" | String
+	 * Challenge if response header 'A' | Long
+	 */
 
-public void OnSocketReceive(Handle sock, char[] receiveData, const int dataSize, any i) {
-	delete g_hSocket[i];
+	/** ==== Challenge Response
+	 * \xFF\xFF\xFF\xFF --------------- | Long
+	 * Header: 'A' -------------------- | Byte
+	 * Challenge ---------------------- | Long
+	 */
+
+	/** ==== Response
+	 * \xFF\xFF\xFF\xFF --------------- | Long
+	 * Header: 'I' -------------------- | Byte
+	 * Protocol ----------------------- | Byte
+	 * Name --------------------------- | String
+	 * Map ---------------------------- | String
+	 * Folder ------------------------- | String
+	 * Game --------------------------- | String
+	 * ID ----------------------------- | Short
+	 * Players ------------------------ | Byte
+	 * Max Players -------------------- | Byte
+	 * Bots --------------------------- | Byte
+	 * Server type -------------------- | Byte
+	 * Environment -------------------- | Byte
+	 * Visibility --------------------- | Byte
+	 * VAC ---------------------------- | Byte
+	 * if The Ship: Mode -------------- | Byte
+	 * if The Ship: Witnesses --------- | Byte
+	 * if The Ship: Duration ---------- | Byte
+	 * Version ------------------------ | String
+	 * Extra Data Flag ---------------- | Byte
+	 * if EDF & 0x80: Port ------------ | Short
+	 * if EDF & 0x10: SteamID --------- | Long Long
+	 * if EDF & 0x40: STV Port -------- | Short
+	 * if EDF & 0x40: STV Name -------- | String
+	 * if EDF & 0x20: Tags ------------ | String
+	 * if EDF & 0x01: GameID ---------- | Long Long
+	 */
 
 	// parse server info
-	int offset = 2;
+	int offset = 4; // begin at 5th byte, index 4
 
-	char srvName[MAX_STR_LEN];
-	srvName = GetString(receiveData, dataSize, offset);
-	offset += strlen(srvName) + 1;
+		// Begin
+// 	int header = GetByte(data, offset);
+	if (GetByte(data, offset) == 'A') {
+		static char reply[A2S_SIZE + 4];
 
-	if (offset >= dataSize) ThrowError("Failed to perform A2S_INFO query. Probable cause is network/firewall issue.");
+		reply = A2S_INFO;
+		for (int i = 25, j = 5; i < 29; ++i, ++j) {
+			reply[i] = data[j];
+		}
+		
+		SocketSend(sock, reply, sizeof(reply));
+
+		return;
+	}
+
+// 	int protocol = GetByte(data, offset);
+	offset += 1;
+
+	char hostname[MAX_STR_LEN];
+	hostname = GetString(data, dataSize, offset);
 
 	char mapName[MAX_STR_LEN];
-	mapName = GetString(receiveData, dataSize, offset);
-	offset += strlen(mapName) + 1;
+	mapName = GetString(data, dataSize, offset);
 
 	char gameDir[MAX_STR_LEN];
-	gameDir = GetString(receiveData, dataSize, offset);
-	offset += strlen(gameDir) + 1;
+	gameDir = GetString(data, dataSize, offset);
 
 	char gameDesc[MAX_STR_LEN];
-	gameDesc = GetString(receiveData, dataSize, offset);
-	offset += strlen(gameDesc) + 1 + 2; // add 2 for next data
+	gameDesc = GetString(data, dataSize, offset);
 
-	char numPlayers[4];
-	int players = receiveData[offset];
-	IntToString(players, numPlayers, sizeof(numPlayers));
-	++offset;
+// 	int gameid = GetShort(data, offset);
+	offset += 2;
 
-	char maxPlayers[4];
-	IntToString(receiveData[offset], maxPlayers, sizeof(maxPlayers));
-	++offset;
+	int players = GetByte(data, offset);
 
-	char numBots[4];
-	int bots = receiveData[offset];
-	IntToString(bots, numBots, sizeof(numBots));
+	int maxPlayers = GetByte(data, offset);
 
-	char humans[4];
-	IntToString(players - bots, humans, sizeof(humans));
+	int bots = GetByte(data, offset);
 
 	char format[MAX_STR_LEN];
 	g_cvarServerFormat.GetString(format, sizeof(format));
-	ReplaceString(format, strlen(format), "%name", g_sServerName[i], false);
+	ReplaceString(format, strlen(format), "%name", g_sServerName[arg], false);
+	ReplaceString(format, strlen(format), "%hostname", hostname);
 	ReplaceString(format, strlen(format), "%map", mapName, false);
-	ReplaceString(format, strlen(format), "%numplayers", numPlayers, false);
-	ReplaceString(format, strlen(format), "%maxplayers", maxPlayers, false);
-	ReplaceString(format, strlen(format), "%humans", humans, false);
-	ReplaceString(format, strlen(format), "%bots", numBots, false);
 
-	g_sServerInfo[i] = format;
+	char playersStr[4];
+	IntToString(players, playersStr, sizeof(playersStr));
+	ReplaceString(format, strlen(format), "%numplayers", playersStr, false);
+
+	char maxPlayersStr[4];
+	IntToString(maxPlayers, maxPlayersStr, sizeof(maxPlayersStr));
+	ReplaceString(format, strlen(format), "%maxplayers", maxPlayersStr, false);
+
+	char humans[4];
+	IntToString(players - bots, humans, sizeof(humans));
+	ReplaceString(format, strlen(format), "%humans", humans, false);
+
+	char botsStr[4];
+	IntToString(bots, botsStr, sizeof(botsStr));
+	ReplaceString(format, strlen(format), "%bots", botsStr, false);
+
+	g_sServerInfo[arg] = format;
+
+	delete g_hSocket[arg];
 }
 
 public void OnSocketDisconnected(Handle sock, any i) {
@@ -386,9 +439,30 @@ public void OnSocketError(Handle sock, const int errorType, const int errorNum, 
 	}
 	
 	g_bSocketError[i] = true;
+
 	delete g_hSocket[i];
 }
 
 Action timerErrorCooldown(Handle timer) {
 	g_bCoolDown = false;
+}
+
+int GetByte(const char[] data, int& offset) {
+	return data[offset++];
+}
+
+char[] GetString(const char[] data, int dataSize, int& offset) {
+	char str[MAX_STR_LEN];
+
+	int j = 0;
+	for (int i = offset; i < dataSize; ++i, ++j) {
+		str[j] = data[i];
+		if (data[i] == '\x0') {
+			break;
+		}
+	}
+
+	offset += j + 1;
+
+	return str;
 }

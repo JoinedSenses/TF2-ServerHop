@@ -358,10 +358,8 @@ public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any ar
 	 * if EDF & 0x01: GameID ---------- | Long Long
 	 */
 
-	// parse server info
 	int offset = 4; // begin at 5th byte, index 4
 
-		// Begin
 // 	int header = GetByte(data, offset);
 	if (GetByte(data, offset) == 'A') {
 		static char reply[A2S_SIZE + 4];

@@ -36,7 +36,8 @@ sm_hop_broadcasthops
 ``` 
 
 ### Available format specifiers for `sm_hop_serverformat`  
-- %name  
+- %name - Name found in config  
+- %hostname - Server hostname  
 - %map  
 - %numplayers  
 - %maxplayers  

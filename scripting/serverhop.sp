@@ -310,9 +310,7 @@ public void Advertise() {
 }
 
 public void OnSocketConnected(Handle sock, any i) {
-	char requestStr[25];
-	Format(requestStr, sizeof(requestStr), "%s", A2S_INFO);
-	SocketSend(sock, requestStr, sizeof(requestStr));
+	SocketSend(sock, A2S_INFO, A2S_SIZE);
 }
 
 public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any arg) {

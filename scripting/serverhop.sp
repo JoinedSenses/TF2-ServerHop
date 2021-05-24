@@ -363,7 +363,7 @@ public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any ar
 		static char reply[A2S_SIZE + 4];
 
 		reply = A2S_INFO;
-		for (int i = 25, j = 5; i < 29; ++i, ++j) {
+		for (int i = A2S_SIZE, j = offset; i < sizeof(reply); ++i, ++j) {
 			reply[i] = data[j];
 		}
 		

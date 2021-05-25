@@ -8,7 +8,7 @@
 #define PLUGIN_NAME "A2SInfo"
 #define PLUGIN_AUTHOR "JoinedSenses"
 #define PLUGIN_DESCRIPTION "Sends A2S_Info query to a Valve game server"
-#define PLUGIN_VERSION "0.1.0"
+#define PLUGIN_VERSION "0.1.1"
 #define PLUGIN_URL "https://github.com/JoinedSenses"
 
 #define A2S_INFO "\xFF\xFF\xFF\xFF\x54Source Engine Query"
@@ -18,7 +18,7 @@
 
 enum struct ByteReader {
 	char data[1024];
-	int dataSize;
+	int size;
 	int offset;
 
 	void SetData(const char[] data, int dataSize, int offset) {
@@ -26,7 +26,7 @@ enum struct ByteReader {
 			this.data[i] = data[i];
 		}
 		this.data[dataSize] = 0;
-		this.dataSize = dataSize;
+		this.size = dataSize;
 		this.offset = offset;
 	}
 
@@ -61,7 +61,7 @@ enum struct ByteReader {
 
 	void GetString(char[] str, int size) {
 		int j = 0;
-		for (int i = this.offset; i < this.dataSize; ++i, ++j) {
+		for (int i = this.offset; i < this.size; ++i, ++j) {
 			if (j < size) {
 				str[j] = this.data[i];
 			}
@@ -188,9 +188,8 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 	int header = byteReader.GetByte();
 
 	if (header == 'A') {
-		static char reply[A2S_SIZE + 4];
+		static char reply[A2S_SIZE + 4] = A2S_INFO;
 
-		reply = A2S_INFO;
 		for (int i = A2S_SIZE, j = byteReader.offset; i < sizeof(reply); ++i, ++j) {
 			PrintToConsole(arg, "%i", (reply[i] = data[j]));
 		}

@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "1.0.1"
+#define PLUGIN_VERSION "1.0.2"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
@@ -163,8 +163,9 @@ public Action Command_Say(int client, int args) {
 		return Plugin_Continue;
 	}
 
-	if (text[strlen(text)-1] == '\"') {
-		text[strlen(text)-1] = '\0';
+	int last = strlen(text) - 1;
+	if (text[last] == '\"') {
+		text[last] = '\0';
 		startidx = 1;
 	}
 
@@ -206,6 +207,7 @@ public Action ServerMenu(int client) {
 		}
 	}
 	menu.Display(client, 20);
+
 	return Plugin_Handled;
 }
 
@@ -313,6 +315,40 @@ public void OnSocketConnected(Handle sock, any i) {
 	SocketSend(sock, A2S_INFO, A2S_SIZE);
 }
 
+enum struct ByteReader {
+	int data[1024];
+	int size;
+	int offset;
+
+	void SetData(const char[] data, int dataSize, int offset) {
+		for (int i = 0; i < dataSize; ++i) {
+			this.data[i] = data[i];
+		}
+		this.data[dataSize] = 0;
+		this.size = dataSize;
+		this.offset = offset;
+	}
+
+	int GetByte() {
+		return this.data[this.offset++];
+	}
+
+	void GetString(char[] str = "", int size = 0) {
+		int j = 0;
+		for (int i = this.offset; i < this.size; ++i, ++j) {
+			if (j < size) {
+				str[j] = this.data[i];
+			}
+
+			if (this.data[i] == '\x0') {
+				break;
+			}
+		}
+
+		this.offset += j + 1;
+	}
+}
+
 public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any arg) {
 	/** ==== Request Format
 	 * \xFF\xFF\xFF\xFF --------------- | Long
@@ -356,14 +392,14 @@ public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any ar
 	 * if EDF & 0x01: GameID ---------- | Long Long
 	 */
 
-	int offset = 4; // begin at 5th byte, index 4
+	ByteReader byteReader;
+	byteReader.SetData(data, dataSize, 4); // begin at 5th byte, index 4
 
-// 	int header = GetByte(data, offset);
-	if (GetByte(data, offset) == 'A') {
-		static char reply[A2S_SIZE + 4];
+	// header
+	if (byteReader.GetByte() == 'A') { // challenge response received
+		static char reply[A2S_SIZE + 4] = A2S_INFO;
 
-		reply = A2S_INFO;
-		for (int i = A2S_SIZE, j = offset; i < sizeof(reply); ++i, ++j) {
+		for (int i = A2S_SIZE, j = byteReader.offset; i < sizeof(reply); ++i, ++j) {
 			reply[i] = data[j];
 		}
 		
@@ -373,33 +409,33 @@ public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any ar
 	}
 
 	// skip protocol
-	offset += 1;
+	byteReader.offset += 1;
 
-	char hostname[MAX_STR_LEN];
-	hostname = GetString(data, dataSize, offset);
+	char hostName[64];
+	byteReader.GetString(hostName, sizeof(hostName));
 
-	char mapName[MAX_STR_LEN];
-	mapName = GetString(data, dataSize, offset);
+	char mapName[80];
+	byteReader.GetString(mapName, sizeof(mapName));
 
 	// skip game directory
-	GetString(data, dataSize, offset);
+	byteReader.GetString();
 
 	// skip game description
-	GetString(data, dataSize, offset);
+	byteReader.GetString();
 
 	// skip gameid
-	offset += 2;
+	byteReader.offset += 2;
 
-	int players = GetByte(data, offset);
+	int players = byteReader.GetByte();
 
-	int maxPlayers = GetByte(data, offset);
+	int maxPlayers = byteReader.GetByte();
 
-	int bots = GetByte(data, offset);
+	int bots = byteReader.GetByte();
 
 	char format[MAX_STR_LEN];
 	g_cvarServerFormat.GetString(format, sizeof(format));
 	ReplaceString(format, strlen(format), "%name", g_sServerName[arg], false);
-	ReplaceString(format, strlen(format), "%hostname", hostname);
+	ReplaceString(format, strlen(format), "%hostname", hostName);
 	ReplaceString(format, strlen(format), "%map", mapName, false);
 
 	char playersStr[4];
@@ -441,24 +477,4 @@ public void OnSocketError(Handle sock, const int errorType, const int errorNum, 
 
 Action timerErrorCooldown(Handle timer) {
 	g_bCoolDown = false;
-}
-
-int GetByte(const char[] data, int& offset) {
-	return data[offset++];
-}
-
-char[] GetString(const char[] data, int dataSize, int& offset) {
-	char str[MAX_STR_LEN];
-
-	int j = 0;
-	for (int i = offset; i < dataSize; ++i, ++j) {
-		str[j] = data[i];
-		if (data[i] == '\x0') {
-			break;
-		}
-	}
-
-	offset += j + 1;
-
-	return str;
 }

@@ -101,7 +101,7 @@ public void OnPluginStart() {
 
 public Action cmdQuery(int client, int args) {
 	if (!args) {
-		ReplyToCommand(client, "Requires arg ip:port");
+		Print(client, "Requires arg ip:port");
 		return Plugin_Handled;
 	}
 

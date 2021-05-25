@@ -363,7 +363,7 @@ public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any ar
 	 * Challenge ---------------------- | Long
 	 */
 
-	/** ==== Response
+	/** ==== Normal Response
 	 * \xFF\xFF\xFF\xFF --------------- | Long
 	 * Header: 'I' -------------------- | Byte
 	 * Protocol ----------------------- | Byte

@@ -48,21 +48,24 @@ enum struct ByteReader {
 		return x[0] | x[1] << 16;
 	}
 
-	void GetLongLong(char value[MAX_STR_LEN]) {
+	void GetLongLong(char[] value, int size) {
 		int x[2];
 		x[0] = this.GetLong();
 		x[1] = this.GetLong();
 
 		KeyValues kv = new KeyValues("");
 		kv.SetUInt64("value", x);
-		kv.GetString("value", value, sizeof(value));
+		kv.GetString("value", value, size);
 		delete kv;
 	}
 
-	void GetString(char str[MAX_STR_LEN]) {
+	void GetString(char[] str, int size) {
 		int j = 0;
 		for (int i = this.offset; i < this.dataSize; ++i, ++j) {
-			str[j] = this.data[i];
+			if (j < size) {
+				str[j] = this.data[i];
+			}
+
 			if (this.data[i] == '\x0') {
 				break;
 			}
@@ -201,17 +204,17 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 
 	int protocol = byteReader.GetByte();
 
-	char srvName[MAX_STR_LEN];
-	byteReader.GetString(srvName);
+	char srvName[64];
+	byteReader.GetString(srvName, sizeof(srvName));
 
-	char mapName[MAX_STR_LEN];
-	byteReader.GetString(mapName);
+	char mapName[80];
+	byteReader.GetString(mapName, sizeof(mapName));
 
-	char gameDir[MAX_STR_LEN];
-	byteReader.GetString(gameDir);
+	char gameDir[16];
+	byteReader.GetString(gameDir, sizeof(gameDir));
 
-	char gameDesc[MAX_STR_LEN];
-	byteReader.GetString(gameDesc);
+	char gameDesc[64];
+	byteReader.GetString(gameDesc, sizeof(gameDesc));
 
 	int gameid = byteReader.GetShort();
 
@@ -221,18 +224,18 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 
 	int bots = byteReader.GetByte();
 
-	char serverType[MAX_STR_LEN];
+	char serverType[16];
 	switch (byteReader.GetByte()) {
-		case 'd': serverType = "Dedicated";
-		case 'l': serverType = "Non-Dedicated";
-		case 'p': serverType = "STV Relay";
+		case 'd': strcopy(serverType, sizeof(serverType), "Dedicated");
+		case 'l': strcopy(serverType, sizeof(serverType), "Non-Dedicated");
+		case 'p': strcopy(serverType, sizeof(serverType), "STV Relay");
 	}
 
-	char environment[MAX_STR_LEN];
+	char environment[8];
 	switch (byteReader.GetByte()) {
-		case 'l': environment = "Linux";
-		case 'w': environment = "Windows";
-		case 'm', 'o': environment = "Mac";
+		case 'l':      strcopy(environment, sizeof(environment), "Linux");
+		case 'w':      strcopy(environment, sizeof(environment), "Windows");
+		case 'm', 'o': strcopy(environment, sizeof(environment), "Mac");
 	}
 
 	int visibility = byteReader.GetByte();
@@ -246,8 +249,8 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 	 *   int duration = GetByte;
 	 */
 
-	char version[MAX_STR_LEN];
-	byteReader.GetString(version);
+	char version[16];
+	byteReader.GetString(version, sizeof(version));
 
 	int EDF = byteReader.GetByte();
 
@@ -256,26 +259,26 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 		port = byteReader.GetShort();
 	}
 
-	char steamid[MAX_STR_LEN];
+	char steamid[24];
 	if (EDF & 0x10) {
-		byteReader.GetLongLong(steamid);
+		byteReader.GetLongLong(steamid, sizeof(steamid));
 	}
 
 	int stvport;
-	char stvserver[MAX_STR_LEN];
+	char stvserver[64];
 	if (EDF & 0x40) {
 		stvport = byteReader.GetShort();
-		byteReader.GetString(stvserver);
+		byteReader.GetString(stvserver, sizeof(stvserver));
 	}
 
-	char tags[MAX_STR_LEN];
+	char tags[64];
 	if (EDF & 0x20) {
-		byteReader.GetString(tags);
+		byteReader.GetString(tags, sizeof(tags));
 	}
 
-	char gameid64[MAX_STR_LEN];
+	char gameid64[24];
 	if (EDF & 0x01) {
-		byteReader.GetLongLong(gameid64);
+		byteReader.GetLongLong(gameid64, sizeof(gameid64));
 	}
 	// end
 

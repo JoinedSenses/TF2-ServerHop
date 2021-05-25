@@ -111,7 +111,7 @@ public Action cmdQuery(int client, int args) {
 	RegexError e;
 	int ret = g_Regex.Match(arg, e);
 	if (ret == -1) {
-		ReplyToCommand(client, "Invalid IP:Port. Error: %i", e);
+		Print(client, "Invalid IP:Port. Error: %i", e);
 		return Plugin_Handled;
 	}
 
@@ -121,7 +121,7 @@ public Action cmdQuery(int client, int args) {
 	g_Regex.GetSubString(1, ip, sizeof(ip));
 	g_Regex.GetSubString(2, port, sizeof(port));
 
-	ReplyToCommand(client, "Attempting to connect to %s:%i", ip, StringToInt(port));
+	Print(client, "Attempting to connect to %s:%i", ip, StringToInt(port));
 
 	delete g_Socket;
 	g_Socket = new Socket(SOCKET_UDP, socketError);
@@ -132,13 +132,13 @@ public Action cmdQuery(int client, int args) {
 }
 
 public void socketConnect(Socket socket, any arg) {
-	PrintToConsole(arg, "Socket connected");
+	Print(arg, "Socket connected");
 	
 	g_Socket.Send(A2S_INFO, A2S_SIZE);
 }
 
 public void socketReceive(Socket sock, char[] data, const int dataSize, any arg) {
-	PrintToConsole(arg, "Received data: %s %i", data, dataSize);
+	Print(arg, "Received data: %s %i", data, dataSize);
 
 	/** ==== Request Format
 	 * \xFF\xFF\xFF\xFF --------------- | Long
@@ -191,12 +191,12 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 		static char reply[A2S_SIZE + 4] = A2S_INFO;
 
 		for (int i = A2S_SIZE, j = byteReader.offset; i < sizeof(reply); ++i, ++j) {
-			PrintToConsole(arg, "%i", (reply[i] = data[j]));
+			Print(arg, "%i", (reply[i] = data[j]));
 		}
 		
 		g_Socket.Send(reply, sizeof(reply));
 
-		PrintToConsole(arg, "Sent challenge response: %s%s", reply, reply[25]);
+		Print(arg, "Sent challenge response: %s%s", reply, reply[25]);
 
 		return;
 	}
@@ -281,7 +281,7 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 	}
 	// end
 
-	PrintToConsole(
+	Print(
 		arg,
 		"Header: %c\n" ...
 		"Protocol: %i\n" ...
@@ -334,10 +334,20 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 
 public void socketDisconnect(Socket sock, any arg) {
 	delete g_Socket;
-	PrintToConsole(arg, "Socket disconnected");
+	Print(arg, "Socket disconnected");
 }
 
 public void socketError(Socket socket, const int errorType, const int errorNum, any arg) {
 	delete g_Socket;
-	PrintToConsole(arg, "Socket error. Type: %i Num %i", errorType, errorNum);
+	Print(arg, "Socket error. Type: %i Num %i", errorType, errorNum);
+}
+
+void Print(int client, char[] fmt, any ...) {
+	char output[1024];
+	VFormat(output, sizeof(output), fmt, 3);
+
+	if (client)
+		PrintToConsole(client, "%s", output);
+	else
+		PrintToServer("%s", output);
 }

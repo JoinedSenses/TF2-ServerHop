@@ -3,7 +3,7 @@
 #include <sourcemod>
 #include <socket>
 
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.0.1"
 #define PLUGIN_DESCRIPTION "Provides live server info with join option"
 #define MAX_SERVERS 10
 #define REFRESH_TIME 60.0
@@ -372,7 +372,7 @@ public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any ar
 		return;
 	}
 
-// 	int protocol = GetByte(data, offset);
+	// skip protocol
 	offset += 1;
 
 	char hostname[MAX_STR_LEN];
@@ -381,13 +381,13 @@ public void OnSocketReceive(Handle sock, char[] data, const int dataSize, any ar
 	char mapName[MAX_STR_LEN];
 	mapName = GetString(data, dataSize, offset);
 
-	char gameDir[MAX_STR_LEN];
-	gameDir = GetString(data, dataSize, offset);
+	// skip game directory
+	GetString(data, dataSize, offset);
 
-	char gameDesc[MAX_STR_LEN];
-	gameDesc = GetString(data, dataSize, offset);
+	// skip game description
+	GetString(data, dataSize, offset);
 
-// 	int gameid = GetShort(data, offset);
+	// skip gameid
 	offset += 2;
 
 	int players = GetByte(data, offset);

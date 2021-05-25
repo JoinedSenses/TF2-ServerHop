@@ -16,6 +16,62 @@
 
 #define MAX_STR_LEN 160
 
+enum struct ByteReader {
+	char data[1024];
+	int dataSize;
+	int offset;
+
+	void SetData(const char[] data, int dataSize, int offset) {
+		for (int i = 0; i < dataSize; ++i) {
+			this.data[i] = data[i];
+		}
+		this.data[dataSize] = 0;
+		this.dataSize = dataSize;
+		this.offset = offset;
+	}
+
+	int GetByte() {
+		return this.data[this.offset++];
+	}
+
+	int GetShort() {
+		int x[2];
+		x[0] = this.GetByte();
+		x[1] = this.GetByte();
+		return x[0] | x[1] << 8;
+	}
+
+	int GetLong() {
+		int x[2];
+		x[0] = this.GetShort();
+		x[1] = this.GetShort();
+		return x[0] | x[1] << 16;
+	}
+
+	void GetLongLong(char value[MAX_STR_LEN]) {
+		int x[2];
+		x[0] = this.GetLong();
+		x[1] = this.GetLong();
+
+		KeyValues kv = new KeyValues("");
+		kv.SetUInt64("value", x);
+		kv.GetString("value", value, sizeof(value));
+		delete kv;
+	}
+
+	void GetString(char str[MAX_STR_LEN]) {
+		int j = 0;
+		for (int i = this.offset; i < this.dataSize; ++i, ++j) {
+			str[j] = this.data[i];
+			if (this.data[i] == '\x0') {
+				break;
+			}
+		}
+
+		this.offset += j + 1;
+	}
+}
+
 Regex g_Regex;
 Socket g_Socket;
 
@@ -123,15 +179,16 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 	 * if EDF & 0x01: GameID ---------- | Long Long
 	 */
 
-	int offset = 4; // begin at 5th byte, index 4
+	ByteReader byteReader;
+	byteReader.SetData(data, dataSize, 4); // begin at 5th byte, index 4
 
-	int header = GetByte(data, offset);
+	int header = byteReader.GetByte();
 
 	if (header == 'A') {
 		static char reply[A2S_SIZE + 4];
 
 		reply = A2S_INFO;
-		for (int i = A2S_SIZE, j = offset; i < sizeof(reply); ++i, ++j) {
+		for (int i = A2S_SIZE, j = byteReader.offset; i < sizeof(reply); ++i, ++j) {
 			PrintToConsole(arg, "%i", (reply[i] = data[j]));
 		}
 		
@@ -142,45 +199,45 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 		return;
 	}
 
-	int protocol = GetByte(data, offset);
+	int protocol = byteReader.GetByte();
 
 	char srvName[MAX_STR_LEN];
-	srvName = GetString(data, dataSize, offset);
+	byteReader.GetString(srvName);
 
 	char mapName[MAX_STR_LEN];
-	mapName = GetString(data, dataSize, offset);
+	byteReader.GetString(mapName);
 
 	char gameDir[MAX_STR_LEN];
-	gameDir = GetString(data, dataSize, offset);
+	byteReader.GetString(gameDir);
 
 	char gameDesc[MAX_STR_LEN];
-	gameDesc = GetString(data, dataSize, offset);
+	byteReader.GetString(gameDesc);
 
-	int gameid = GetShort(data, offset);
+	int gameid = byteReader.GetShort();
 
-	int players = GetByte(data, offset);
+	int players = byteReader.GetByte();
 
-	int maxPlayers = GetByte(data, offset);
+	int maxPlayers = byteReader.GetByte();
 
-	int bots = GetByte(data, offset);
+	int bots = byteReader.GetByte();
 
 	char serverType[MAX_STR_LEN];
-	switch (GetByte(data, offset)) {
+	switch (byteReader.GetByte()) {
 		case 'd': serverType = "Dedicated";
 		case 'l': serverType = "Non-Dedicated";
 		case 'p': serverType = "STV Relay";
 	}
 
 	char environment[MAX_STR_LEN];
-	switch (GetByte(data, offset)) {
+	switch (byteReader.GetByte()) {
 		case 'l': environment = "Linux";
 		case 'w': environment = "Windows";
 		case 'm', 'o': environment = "Mac";
 	}
 
-	int visibility = GetByte(data, offset);
+	int visibility = byteReader.GetByte();
 
-	int vac = GetByte(data, offset);
+	int vac = byteReader.GetByte();
 
 	/* TODO:
 	 * if gameid == The Ship
@@ -190,35 +247,35 @@ public void socketReceive(Socket sock, char[] data, const int dataSize, any arg)
 	 */
 
 	char version[MAX_STR_LEN];
-	version = GetString(data, dataSize, offset);
+	byteReader.GetString(version);
 
-	int EDF = GetByte(data, offset);
+	int EDF = byteReader.GetByte();
 
 	int port;
 	if (EDF & 0x80) {
-		port = GetShort(data, offset);
+		port = byteReader.GetShort();
 	}
 
 	char steamid[MAX_STR_LEN];
 	if (EDF & 0x10) {
-		steamid = GetLongLong(data, offset);
+		byteReader.GetLongLong(steamid);
 	}
 
 	int stvport;
 	char stvserver[MAX_STR_LEN];
 	if (EDF & 0x40) {
-		stvport = GetShort(data, offset);
-		stvserver = GetString(data, dataSize, offset);
+		stvport = byteReader.GetShort();
+		byteReader.GetString(stvserver);
 	}
 
 	char tags[MAX_STR_LEN];
 	if (EDF & 0x20) {
-		tags = GetString(data, dataSize, offset);
+		byteReader.GetString(tags);
 	}
 
 	char gameid64[MAX_STR_LEN];
 	if (EDF & 0x01) {
-		gameid64 = GetLongLong(data, offset);
+		byteReader.GetLongLong(gameid64);
 	}
 	// end
 
@@ -281,53 +338,4 @@ public void socketDisconnect(Socket sock, any arg) {
 public void socketError(Socket socket, const int errorType, const int errorNum, any arg) {
 	delete g_Socket;
 	PrintToConsole(arg, "Socket error. Type: %i Num %i", errorType, errorNum);
-}
-
-int GetByte(const char[] data, int& offset) {
-	return data[offset++];
-}
-
-int GetShort(const char[] data, int& offset) {
-	int x[2];
-	x[0] = GetByte(data, offset);
-	x[1] = GetByte(data, offset);
-	return x[0] | x[1] << 8;
-}
-
-int GetLong(const char[] data, int& offset) {
-	int x[2];
-	x[0] = GetShort(data, offset);
-	x[1] = GetShort(data, offset);
-	return x[0] | x[1] << 16;
-}
-
-char[] GetLongLong(const char[] data, int& offset) {
-	char value[MAX_STR_LEN];
-	
-	int x[2];
-	x[0] = GetLong(data, offset);
-	x[1] = GetLong(data, offset);
-
-	KeyValues kv = new KeyValues("");
-	kv.SetUInt64("value", x);
-	kv.GetString("value", value, sizeof(value));
-	delete kv;
-
-	return value;
-}
-
-char[] GetString(const char[] data, int dataSize, int& offset) {
-	char str[MAX_STR_LEN];
-
-	int j = 0;
-	for (int i = offset; i < dataSize; ++i, ++j) {
-		str[j] = data[i];
-		if (data[i] == '\x0') {
-			break;
-		}
-	}
-
-	offset += j + 1;
-
-	return str;
 }

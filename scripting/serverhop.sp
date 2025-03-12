@@ -481,7 +481,7 @@ public void OnSocketError(Handle sock, const int errorType, const int errorNum, 
 	delete g_hSocket[i];
 }
 
-public Action timerErrorCooldown(Handle timer) {
+Action timerErrorCooldown(Handle timer) {
 	g_bCoolDown = false;
 	return Plugin_Handled;
 }

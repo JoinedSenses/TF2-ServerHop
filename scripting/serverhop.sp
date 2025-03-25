@@ -272,7 +272,7 @@ public Action RefreshServerInfo(Handle timer) {
 
 	CreateTimer(SERVER_TIMEOUT, CleanUp);
 
-	return Plugin_Handled;
+	return Plugin_Continue;
 }
 
 public Action CleanUp(Handle timer) {
